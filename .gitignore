@@ -10,6 +10,7 @@ testing/Classifiers/
 env/
 .python-version
 data/
+data_dropbox/
 figures/
 
 # Byte-compiled / optimized / DLL files

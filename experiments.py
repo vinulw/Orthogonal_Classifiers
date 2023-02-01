@@ -704,13 +704,17 @@ if __name__ == "__main__":
     #assert()
     #obtain_D_encode_preds()
     #single_image_sv, sum_state_sv = mps_image_singular_values()
-    #num_samples = 1000
+    num_samples = 1000
     #batch_nums = [5, 2, 5, 2, 10]
-    #batch_nums = [10, 10, 10]
+    batch_nums = [10, 10, 10]
+
+    # Full MNIST data generation
     #num_samples = 5421*10
     #batch_nums = [3, 13, 139, 10]
-    num_samples = 6000*10
-    batch_nums = [2, 3, 5, 2, 5, 2, 5, 2, 10]
+
+    # Fashion MNIST data generation
+    #num_samples = 6000*10
+    #batch_nums = [2, 3, 5, 2, 5, 2, 5, 2, 10]
     ortho_at_end = True
     D_total = 32
     #print('COLLECTING D_TOTAL SUM STATES')
@@ -737,6 +741,7 @@ if __name__ == "__main__":
 
     # compute_confusion_matrix(bitstrings)
     #path = "Classifiers/mnist_mixed_sum_states/D_total/" + f"sum_states_D_total_{D_total}/"
+    assert()
     path = f'mnist/sum_state_D_total_{D_total}_{num_samples}/'
     data_path = 'data/mnist/'
     os.makedirs(path, exist_ok=True)
