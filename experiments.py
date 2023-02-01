@@ -697,21 +697,21 @@ def tensor_network_stacking_experiment(dataset, max_n_copies):
 
 if __name__ == "__main__":
 
-    tensor_network_stacking_experiment('mnist',5)
+    #tensor_network_stacking_experiment('mnist',5)
 
     #get_D_final_predictions()
     #tensor_network_stacking_experiment('mnist', 16)
-    assert()
+    #assert()
     #obtain_D_encode_preds()
     #single_image_sv, sum_state_sv = mps_image_singular_values()
-    num_samples = 1000
+    #num_samples = 1000
     #batch_nums = [5, 2, 5, 2, 10]
-    batch_nums = [10, 10, 10]
+    #batch_nums = [10, 10, 10]
     #num_samples = 5421*10
     #batch_nums = [3, 13, 139, 10]
-    #num_samples = 6000*10
-    #batch_nums = [2, 3, 5, 2, 5, 2, 5, 2, 10]
-    ortho_at_end = False
+    num_samples = 6000*10
+    batch_nums = [2, 3, 5, 2, 5, 2, 5, 2, 10]
+    ortho_at_end = True
     D_total = 32
     #print('COLLECTING D_TOTAL SUM STATES')
     D_encode = D_total
@@ -725,15 +725,26 @@ if __name__ == "__main__":
                 arrangement='one class',
                 initialise_classifier=True,
                 prep_sum_states = True,
-                centre_site = True,
-                initialise_classifier_settings=([10,10,10], ortho_at_end),
+                centre_site = False,
+                initialise_classifier_settings=(batch_nums, ortho_at_end),
             )
     mps_images, labels = data
     classifier, sum_states = classifiers
-    compute_confusion_matrix(bitstrings)
-    assert()
+    predictions = np.array([abs((mps_image.H @ classifier).squeeze().data) for mps_image in tqdm(mps_images)])
+    for i in range(5):
+        print(predictions[i].shape)
+    print(evaluate_classifier_top_k_accuracy(predictions, labels, 1))
+
+    # compute_confusion_matrix(bitstrings)
     #path = "Classifiers/mnist_mixed_sum_states/D_total/" + f"sum_states_D_total_{D_total}/"
-    #os.makedirs(path, exist_ok=True)
+    path = f'mnist/sum_state_D_total_{D_total}_{num_samples}/'
+    data_path = 'data/mnist/'
+    os.makedirs(path, exist_ok=True)
+    [save_qtn_classifier(s, path + f'digit{i}') for i, s in enumerate(sum_states)]
+    save_qtn_classifier(classifier, path + 'classifier')
+    np.save(data_path + f'N_{num_samples}_D_total_{D_total}_predictions.npy', predictions)
+    np.save(data_path + f'N_{num_samples}_D_total_{D_total}_labels.npy', labels)
+    assert()
     #[save_qtn_classifier(s , "mnist_mixed_sum_states/D_total/" + f"sum_states_D_total_{D_total}/" + f"digit_{i}") for i, s in enumerate(sum_states)]
     #assert()
     #d_batch_vs_acc(bitstrings)

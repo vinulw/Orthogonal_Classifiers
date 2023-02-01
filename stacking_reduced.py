@@ -13,11 +13,9 @@ Tools
 
 def load_data(dataset):
     initial_label_qubits = np.load(
-        "data/" + dataset + "/new_ortho_d_final_vs_training_predictions.npy"
-    )[15]
+        "data/" + dataset + "/new_ortho_d_final_vs_training_predictions.npy")[15]
     y_train = np.load(
-        "data/" + dataset + "/ortho_d_final_vs_training_predictions_labels.npy"
-    )
+        "data/" + dataset + "/ortho_d_final_vs_training_predictions_labels.npy")
 
     # Normalise predictions
     initial_label_qubits = np.array(
