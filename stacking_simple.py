@@ -46,6 +46,49 @@ def test_generate_Zi():
     Zi = generate_Zi(N, i)
     assert(np.allclose(ZII, Zi))
 
+def labelsToBitstrings(labels, qNo):
+    '''
+    Convert the array of labels as ints to bitStrings.
+
+    Note max label number is 256 currently.
+
+    Args
+    ----
+    labels (ndarray int) : Arr of ints of size (N,) where N in the number of
+            images. Ints should be in the set {0, ..., 2**qubitNo}.
+    qNo : Number of qubits in label space
+
+    Output
+    ------
+    labelBitstrings (ndarray int) : Arr of size (N, qubitNo) with a label for
+            each image in bitstring form.
+    '''
+    assert max(labels) < 256, 'Max label number is 256'
+
+    N = labels.shape[0]
+    labels_ = labels.reshape(N, 1).astype(np.uint8)
+    labelBitstrings = np.unpackbits(labels_, axis=1).astype(int)
+    print(labelBitstrings)
+
+    return labelBitstrings[:, 8-qNo:]
+
+def test_labelsToBitstrings():
+    labels = np.array([3, 4, 0, 3, 1, 1, 7, 2, 6, 6])
+
+    correct = np.array([[0,1,1],
+              [1,0,0],
+              [0,0,0],
+              [0,1,1],
+              [0,0,1],
+              [0,0,1],
+              [1,1,1],
+              [0,1,0],
+              [1,1,0],
+              [1,1,0]])
+
+    labelBitstrings = labelsToBitstrings(labels, 3)
+
+    assert np.allclose(labelBitstrings, correct)
 
 if __name__=="__main__":
     '''
