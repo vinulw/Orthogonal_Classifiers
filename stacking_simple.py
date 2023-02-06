@@ -1,5 +1,6 @@
 import numpy as np
 from ncon import ncon
+from math import floor
 
 def evaluate_classifier_top_k_accuracy(predictions, y_test, k):
     top_k_predictions = [
@@ -142,6 +143,20 @@ def calculate_dOdV(ϕs, U, Zi):
 
     return dOdVs
 
+def apply_U(ϕs, U):
+    '''
+    Appy the stacking unitary U to ϕ. Currently only works for 1 copy.
+
+    Args
+    ----
+    ϕs : Array containing states of shape (N, n) where N is the number of states
+        and n is the size of the state.
+    U : Stacking unitary
+    '''
+
+    return np.einsum('lm,im->il', U, ϕs)
+
+
 def update_U(ϕs, U, labelBitstrings, f=10):
     '''
     Do a single update of U using tanh cost function.
@@ -160,7 +175,7 @@ def update_U(ϕs, U, labelBitstrings, f=10):
 
     dZ = np.zeros(U.shape, dtype=complex)
     for i in range(qNo):
-        print(f"On Zi : {i}")
+        #print(f"On Zi : {i}")
         Zi = generate_Zi(qNo, i+1)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
@@ -186,6 +201,43 @@ def get_Polar(M):
     M = ncon([x,z],([-1,1],[1,-2]))
     return M
 
+def load_data(statePath, labelPath, Nsamples=None):
+    states = np.load(statePath)[15]
+    labels = np.load(labelPath)
+
+    if Nsamples is None:
+        return states, labels
+
+    noLabels = len(set(labels))
+    samplesPerLabel = int(floor(Nsamples/noLabels))
+    totalSamples = noLabels * samplesPerLabel
+    stateSize = states.shape[1]
+
+    outlabels = np.empty(totalSamples, dtype=int)
+    outStates = np.empty((totalSamples, stateSize), dtype=states.dtype)
+
+    for i, label in enumerate(set(labels)):
+        labelArgs = np.argwhere(labels == label).flatten()
+        sampleIndices = np.random.choice(labelArgs, [samplesPerLabel])
+
+        outlabels[i*samplesPerLabel: (i+1)*samplesPerLabel] = i
+        outStates[i*samplesPerLabel: (i+1)*samplesPerLabel] = states[sampleIndices]
+
+        # # Debugging
+        # print(i)
+        # print('Checking index range...')
+        # print(min(labelArgs))
+        # print(max(labelArgs))
+        # print('Checking correct labels...')
+        # print(min(labels[labelArgs]))
+        # print(max(labels[labelArgs]))
+        # print('')
+
+        assert(np.all(labels[labelArgs] == i))
+
+    return outStates, outlabels
+
+
 if __name__=="__main__":
     '''
     Use data from Lewis' dropbox
@@ -196,21 +248,33 @@ if __name__=="__main__":
 
     N = 1000
 
-    trainingPred = np.load(prefix + trainingPredPath)[15][:N]
-    trainingLabel = np.load(prefix + trainingLabelPath)[:N]
+    trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
+              prefix + trainingLabelPath,
+              N)
 
-    print(trainingPred.shape)
-    print(trainingLabel.shape)
-
-    #acc = evaluate_classifier_top_k_accuracy(trainingPred, trainingLabel, 1)
-    #print(acc)
+    acc = evaluate_classifier_top_k_accuracy(trainingPred, trainingLabel, 1)
+    print(acc)
 
     U = np.eye(16)
     trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
 
+    initialPreds = apply_U(trainingPred, U)
+    accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
+
     U_update = update_U(trainingPred, U, trainingLabelBitstrings)
 
-    print(U_update.shape)
+    updatePreds = apply_U(trainingPred, U_update)
+    accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
 
+    print('Initial accuracy: ', accInitial)
+    print('Update 0 accuracy: ', accUpdate)
+
+    f = 5
+    for i in range(10):
+        print(f'Update step {i+1}')
+        U_update = update_U(trainingPred, U_update, trainingLabelBitstrings, f=f)
+        updatePreds = apply_U(trainingPred, U_update)
+        accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+        print(f'Update {i+1} accuracy: {accUpdate}')
 
 
