@@ -47,6 +47,38 @@ def test_generate_Zi():
     Zi = generate_Zi(N, i)
     assert(np.allclose(ZII, Zi))
 
+def calculate_tanhCost(ϕs, U, labelBitstrings):
+    '''
+    Calculate total tanh Cost
+
+    Args
+    ----
+    ϕs : Array containing states of shape (N, n) where N is the number of states
+        and n is the size of the state.
+    U : Initial stacking unitary to update
+    labelBitstrings (float) : Array of labels for ϕ in bitstring form zero
+                            padded to length of state space in qubits as an
+                            array of size (N, qubitNo) each element in this
+                            array ∈ {0, 1}
+    '''
+    qNo = int(np.log2(ϕs.shape[1])) # No. qubits
+    N = ϕs.shape[0]
+
+    totalCost = 0.0
+
+    for i in range(qNo):
+        Zi = generate_Zi(qNo, i+1)
+        coeffArr = generate_CoeffArr(labelBitstrings, i)
+
+        Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
+
+        currCost = np.tanh(Zoverlaps)
+        currCost = np.einsum('i,i', coeffArr, currCost) / (2*N)
+
+        totalCost += currCost
+    return totalCost
+
+
 def labelsToBitstrings(labels, qNo):
     '''
     Convert the array of labels as ints to bitStrings.
@@ -106,7 +138,7 @@ def generate_CoeffArr(labelBitstrings, i):
 
     labelSubspace = labelBitstrings[:, i]
 
-    return np.where(labelSubspace == 1, -1, 0) # == (-1) ** labelSubspace
+    return np.where(labelSubspace == 1, -1, 1) # == (-1) ** labelSubspace
 
 
 def calculate_ZOverlap(ϕs, U, Zi):
@@ -157,7 +189,7 @@ def apply_U(ϕs, U):
     return np.einsum('lm,im->il', U, ϕs)
 
 
-def update_U(ϕs, U, labelBitstrings, f=10):
+def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False):
     '''
     Do a single update of U using tanh cost function.
 
@@ -171,9 +203,12 @@ def update_U(ϕs, U, labelBitstrings, f=10):
                             array of size (N, qubitNo) each element in this
                             array ∈ {0, 1}
     '''
+    A = 10
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
+    N = ϕs.shape[0]
 
     dZ = np.zeros(U.shape, dtype=complex)
+    totalCost = 0.0
     for i in range(qNo):
         #print(f"On Zi : {i}")
         Zi = generate_Zi(qNo, i+1)
@@ -182,16 +217,23 @@ def update_U(ϕs, U, labelBitstrings, f=10):
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
         dOdVs = calculate_dOdV(ϕs, U, Zi)
 
-        dZi = (np.cosh(Zoverlaps))**(-2)
-        dZi = np.einsum('i,i,ijk->jk', coeffArr, Zoverlaps, dOdVs)
+        dZi = A * (np.tanh(A)*np.cosh(A*np.sign(Zoverlaps)*np.absolute(Zoverlaps)))**(-2)
+        dZi = np.einsum('i,i,ijk->jk', coeffArr, dZi, dOdVs)
 
         dZ += dZi
+
+        if costs:
+            currCost = np.tanh(Zoverlaps)
+            currCost = np.einsum('i,i', coeffArr, currCost) / (2*N)
+            totalCost += currCost
 
     # Normalisation leads to instability
     dZ = dZ / (np.sqrt(ncon([dZ, dZ.conj()], [[1, 2], [1, 2]])) + 1e-14)
 
-    U_update = get_Polar(dZ + f*U)
+    U_update = get_Polar(U + f*dZ)
 
+    if costs:
+        return U_update, totalCost
     return U_update
 
 def get_Polar(M):
@@ -242,11 +284,14 @@ if __name__=="__main__":
     '''
     Use data from Lewis' dropbox
     '''
+    np.random.seed(1)
     prefix = "data_dropbox/mnist/"
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
     N = 1000
+    Nsteps = 50
+    outputCost = True
 
     trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
               prefix + trainingLabelPath,
@@ -258,23 +303,43 @@ if __name__=="__main__":
     U = np.eye(16)
     trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
 
+    setTraininglabels = np.unique(trainingLabelBitstrings, axis=0)
+
+    for i in range(4):
+        print(f"Zi on {i}")
+        coeffArr = generate_CoeffArr(setTraininglabels, i)
+
+        for coeff, bstring in zip(coeffArr, setTraininglabels):
+            print(f'{bstring} :  {coeff}')
+        print("")
+
     initialPreds = apply_U(trainingPred, U)
     accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
 
-    U_update = update_U(trainingPred, U, trainingLabelBitstrings)
-
-    updatePreds = apply_U(trainingPred, U_update)
-    accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
 
     print('Initial accuracy: ', accInitial)
-    print('Update 0 accuracy: ', accUpdate)
+    print("")
 
-    f = 5
-    for i in range(10):
+    U_update = np.copy(U)
+
+    f0 = 0.2
+    f = np.copy(f0)
+    decayRate = 0.25
+    def curr_f(decayRate, itNumber, initialRate):
+        return initialRate / (1 + decayRate * itNumber)
+    for i in range(Nsteps):
         print(f'Update step {i+1}')
-        U_update = update_U(trainingPred, U_update, trainingLabelBitstrings, f=f)
+        f = curr_f(decayRate, i, f0)
+        if f < 5e-4:
+            f = 5e-4
+        print(f'   f: {f}')
+        U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
+                f=f, costs=True)
         updatePreds = apply_U(trainingPred, U_update)
         accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
-        print(f'Update {i+1} accuracy: {accUpdate}')
+        print(f'   Accuracy: {accUpdate}')
+        print(f'   Cost: ', costs)
+        print("")
+
 
 
