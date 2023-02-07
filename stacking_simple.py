@@ -1,6 +1,7 @@
 import numpy as np
 from ncon import ncon
 from math import floor
+import matplotlib.pyplot as plt
 
 def evaluate_classifier_top_k_accuracy(predictions, y_test, k):
     top_k_predictions = [
@@ -315,18 +316,23 @@ if __name__=="__main__":
 
     initialPreds = apply_U(trainingPred, U)
     accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
+    costInitial = calculate_tanhCost(initialPreds, U, trainingLabelBitstrings)
 
 
     print('Initial accuracy: ', accInitial)
     print("")
 
-    U_update = np.copy(U)
+    U_update = np.copy(U) + 1e-3*np.random.randn(*U.shape)
 
     f0 = 0.2
     f = np.copy(f0)
-    decayRate = 0.25
+    decayRate = 0.3
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
+
+    costsList = [costInitial]
+    accuracyList = [accInitial]
+    fList = []
     for i in range(Nsteps):
         print(f'Update step {i+1}')
         f = curr_f(decayRate, i, f0)
@@ -340,6 +346,54 @@ if __name__=="__main__":
         print(f'   Accuracy: {accUpdate}')
         print(f'   Cost: ', costs)
         print("")
+
+        accuracyList.append(accUpdate)
+        costsList.append(costs)
+        fList.append(f)
+
+    plt.figure()
+    plt.title('Accuracy')
+    plt.plot(accuracyList)
+
+    plt.figure()
+    plt.title('Costs')
+    plt.plot(costsList)
+
+    plt.figure()
+    plt.title('Learning Rates')
+    plt.plot(fList)
+
+    plt.show()
+    assert()
+    # Trying scipy minimizer
+    from scipy.optimize import minimize
+    def costf(U):
+        U = U.reshape(16, 16)
+        cost = calculate_tanhCost(trainingPred, U, trainingLabelBitstrings)
+        return -1*cost
+
+    def callback(xk, state):
+        print(f'Current iteration: {state.nit}')
+        print(f'Current f: {state.fun}')
+
+    res = minimize(costf, x0=U_update.reshape(16**2), method='Nelder-Mead',
+                   options={'disp': True, 'maxiter': 20}, callback=callback)
+    print(res)
+    U = res.x .reshape(16, 16)
+
+    updatePred = apply_U(trainingPred, U)
+    accUpdate = evaluate_classifier_top_k_accuracy(updatePred, trainingLabel, 1)
+    print("Trying scipy minimizer")
+    print(f'Accuracy:  {accUpdate}')
+    print("Applying polar decomposition...")
+    U = get_Polar(U)
+    updatePred = apply_U(trainingPred, U)
+    accUpdate = evaluate_classifier_top_k_accuracy(updatePred, trainingLabel, 1)
+    print(f'Accuracy:  {accUpdate}')
+
+
+
+
 
 
 
