@@ -86,6 +86,9 @@ def get_dZandC(states, Ncopies, V, A=10):
 
 def optimiseVPolar(states1, states2, Ncopies, V, A=10, f=50, m=50):
     m = 0
+    cost, accuracy = getCostandAccuracy(states1, states2, Ncopies, V, A)
+    costs = [cost]
+    accuracies = [accuracy]
     while m < 50:
         dZ1, c1 = get_dZandC(states1, Ncopies, V, A)
         dZ2, c2 = get_dZandC(states2, Ncopies, V, A)
@@ -97,7 +100,10 @@ def optimiseVPolar(states1, states2, Ncopies, V, A=10, f=50, m=50):
 
         V = get_Polar(dZ + f*V)
         m += 1
-    return V
+        cost, accuracy = getCostandAccuracy(states1, states2, Ncopies, V, A)
+        costs.append(cost)
+        accuracies.append(accuracy)
+    return V, costs, accuracies
 
 def getCostandAccuracy(states1, states2, Ncopies, V, A=10):
     overlapZ1 = np.real(partialZMeasure(states1, Ncopies, V))
@@ -106,7 +112,7 @@ def getCostandAccuracy(states1, states2, Ncopies, V, A=10):
 
     N = states1.shape[0]
 
-    Cost = (np.sum(overlapZ1) - np.sum(overlapZ2))/(2*N)
+    Cost = (np.sum(np.tanh(overlapZ1)) - np.sum(np.tanh(overlapZ2)))/(2*N)
 #    print(overlapZ1)
 #    print()
 #    print(overlapZ2)
@@ -275,26 +281,36 @@ if __name__ =="__main__":
 
 #    dZ, c = get_dZandC(F, 1, U)
 
-    V1 = optimiseVPolar(D1, D2, 1, U)
+    V1, costs, accuracies = optimiseVPolar(D1, D2, 1, U)
     print(V1.shape)
 
-    V2 = ncon([V1, np.eye(2)], [[-1, -3], [-2, -4]]).reshape(2**2, 2**2)
-    FF1 = getNCopiedSpace(F1, 2)
-    FF2 = getNCopiedSpace(F2, 2)
+    import matplotlib.pyplot as plt
+    plt.figure()
+    plt.plot(costs)
+    plt.title('Costs')
 
-    V2 = optimiseVPolar(FF1, FF2, 2, np.eye(4))
-    print(V2.shape)
+    plt.figure()
+    plt.plot(accuracies)
+    plt.title('Accuracies')
+    plt.show()
 
-    print(getCostandAccuracy(D1, D2, 1, U), ' Before optimisation 1 copy')
-#    print(get_Classify1(N, U, D1, D2), ' Andrew Cost Accuracy')
-    print(getCostandAccuracy(D1, D2, 1, V1), ' After optimisation 1 copy')
-    print(getCostandAccuracy(FF1, FF2, 2, V2), ' After optimisation 2 copy')
-
-    V3 = ncon([V2, np.eye(2)], ((-1, -3), (-2, -4))).reshape([2**3, 2**3])
-    FFF1 = getNCopiedSpace(F1, 3)
-    FFF2 = getNCopiedSpace(F2, 3)
-
-    print(getCostandAccuracy(FFF1, FFF2, 3, V3), ' Before optimisation 3 copy')
-    V3 = optimiseVPolar(FFF1, FFF2, 3, V3)
-
-    print(getCostandAccuracy(FFF1, FFF2, 3, V3), ' After optimisation 3 copy')
+#    V2 = ncon([V1, np.eye(2)], [[-1, -3], [-2, -4]]).reshape(2**2, 2**2)
+#    FF1 = getNCopiedSpace(F1, 2)
+#    FF2 = getNCopiedSpace(F2, 2)
+#
+#    V2 = optimiseVPolar(FF1, FF2, 2, np.eye(4))
+#    print(V2.shape)
+#
+#    print(getCostandAccuracy(D1, D2, 1, U), ' Before optimisation 1 copy')
+##    print(get_Classify1(N, U, D1, D2), ' Andrew Cost Accuracy')
+#    print(getCostandAccuracy(D1, D2, 1, V1), ' After optimisation 1 copy')
+#    print(getCostandAccuracy(FF1, FF2, 2, V2), ' After optimisation 2 copy')
+#
+#    V3 = ncon([V2, np.eye(2)], ((-1, -3), (-2, -4))).reshape([2**3, 2**3])
+#    FFF1 = getNCopiedSpace(F1, 3)
+#    FFF2 = getNCopiedSpace(F2, 3)
+#
+#    print(getCostandAccuracy(FFF1, FFF2, 3, V3), ' Before optimisation 3 copy')
+#    V3 = optimiseVPolar(FFF1, FFF2, 3, V3)
+#
+#    print(getCostandAccuracy(FFF1, FFF2, 3, V3), ' After optimisation 3 copy')
