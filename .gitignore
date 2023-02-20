@@ -12,6 +12,7 @@ env/
 data/
 data_dropbox/
 figures/
+*figs/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
