@@ -42,7 +42,7 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, Zis):
 
     totalCost = 0.0
 
-    for Zi in Zis:
+    for i, Zi in enumerate(Zis):
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
         Zoverlaps = jnp.real(calculate_ZOverlap_batched(ϕs, U, Zi))
@@ -53,8 +53,7 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, Zis):
         totalCost += currCost
     return totalCost
 
-def update_U_jax(ϕs, U, labelBitstrings, Zis, f=0.1, costs=False):
-    A = 100
+def update_U_jax(ϕs, U, labelBitstrings, Zis, f=0.1, costs=False, A=100):
     N = ϕs.shape[0]
 
     dZ = np.zeros(U.shape, dtype=np.complex64)
@@ -107,7 +106,7 @@ if __name__=="__main__":
 
     U = np.eye(16)
 
-    for i in range(2):
+    for i in range(4):
         Zis.append(generate_Zi(Nq, i+1))
 
     Zoverlaps = []
