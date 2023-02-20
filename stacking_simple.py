@@ -190,7 +190,7 @@ def apply_U(ϕs, U):
     return np.einsum('lm,im->il', U, ϕs)
 
 
-def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False):
+def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100):
     '''
     Do a single update of U using tanh cost function.
 
@@ -204,7 +204,6 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False):
                             array of size (N, qubitNo) each element in this
                             array ∈ {0, 1}
     '''
-    A = 10
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
     N = ϕs.shape[0]
 
@@ -285,6 +284,8 @@ if __name__=="__main__":
     '''
     Use data from Lewis' dropbox
     '''
+    import time
+
     np.random.seed(1)
     prefix = "data_dropbox/mnist/"
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
@@ -306,13 +307,13 @@ if __name__=="__main__":
 
     setTraininglabels = np.unique(trainingLabelBitstrings, axis=0)
 
-    for i in range(4):
-        print(f"Zi on {i}")
-        coeffArr = generate_CoeffArr(setTraininglabels, i)
-
-        for coeff, bstring in zip(coeffArr, setTraininglabels):
-            print(f'{bstring} :  {coeff}')
-        print("")
+#    for i in range(4):
+#        print(f"Zi on {i}")
+#        coeffArr = generate_CoeffArr(setTraininglabels, i)
+#
+#        for coeff, bstring in zip(coeffArr, setTraininglabels):
+#            print(f'{bstring} :  {coeff}')
+#        print("")
 
     initialPreds = apply_U(trainingPred, U)
     accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
@@ -324,6 +325,9 @@ if __name__=="__main__":
 
     U_update = np.copy(U) + 1e-3*np.random.randn(*U.shape)
 
+    start = time.perf_counter()
+
+    A = 100
     f0 = 0.2
     f = np.copy(f0)
     decayRate = 0.3
@@ -340,7 +344,7 @@ if __name__=="__main__":
             f = 5e-4
         print(f'   f: {f}')
         U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
-                f=f, costs=True)
+                f=f, costs=True, A=A)
         updatePreds = apply_U(trainingPred, U_update)
         accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
         print(f'   Accuracy: {accUpdate}')
@@ -350,6 +354,10 @@ if __name__=="__main__":
         accuracyList.append(accUpdate)
         costsList.append(costs)
         fList.append(f)
+
+    end = time.perf_counter()
+
+    print(f'Elapsed time: {end - start:0.4f} seconds')
 
     plt.figure()
     plt.title('Accuracy')
@@ -390,10 +398,3 @@ if __name__=="__main__":
     updatePred = apply_U(trainingPred, U)
     accUpdate = evaluate_classifier_top_k_accuracy(updatePred, trainingLabel, 1)
     print(f'Accuracy:  {accUpdate}')
-
-
-
-
-
-
-
