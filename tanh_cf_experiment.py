@@ -35,8 +35,15 @@ trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
 trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
 N = 1000
-Nsteps = 50
+Nsteps = 200
 outputCost = True
+####
+# Select training parameters
+####
+parameters = np.array([parameters[100]])
+
+## Change the file name
+save_fname = 'tanh_output_100_long_run.csv'
 
 trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
           prefix + trainingLabelPath,
@@ -51,7 +58,6 @@ accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
 costInitial = calculate_tanhCost(initialPreds, U, trainingLabelBitstrings)
 
 U_update = np.copy(U) + 1e-3*np.random.randn(*U.shape)
-save_fname = 'tanh_output.csv'
 
 with open(save_fname, 'w') as f:
     line = 'pIndex, A, f0, decayRate, step, f, accuracy, cost\n'

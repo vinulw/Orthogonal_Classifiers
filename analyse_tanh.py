@@ -6,17 +6,17 @@ from tqdm import tqdm
 import os
 
 if __name__=="__main__":
-    data = pd.read_csv('tanh_jax_output.csv', sep=' *, *', engine='python')
+    data = pd.read_csv('tanh_output_100_long_run.csv', sep=' *, *', engine='python')
     #print(data)
     columns = ['f0', 'decayRate', 'step', 'f', 'accuracy', 'cost']
 
     keys = data.keys()
     print(keys)
     pIndices = data['pIndex'].unique()
-#    print(pIndices)
+    print(f'pIndices: {min(pIndices)} - {max(pIndices)}')
 
     parent_directory = os.getcwd()
-    save_path = 'tanh_jax_figs/costs/'
+    save_path = 'tanh_figs/accuracy/'
 
     save_path = os.path.join(parent_directory, save_path)
 
@@ -30,11 +30,12 @@ if __name__=="__main__":
         plt.figure()
         tstring = f'Decay Rate: {datacurr["decayRate"].iloc[0]}, f0: {datacurr["f0"].iloc[0]}, A: {datacurr["A"].iloc[0]}'
         plt.title(tstring)
-        plt.plot(datacurr['step'], datacurr['cost'])
+        plt.plot(datacurr['step'], datacurr['accuracy'])
         plt.xlabel('step')
-        plt.ylabel('cost')
+        plt.ylabel('accuracy')
 
-        fname = f'{int(pind)}.png'
+        pind = 100
+        fname = f'{int(pind)}_long.png'
         fpath = os.path.join(save_path, fname)
         plt.savefig(fpath)
         plt.close()
