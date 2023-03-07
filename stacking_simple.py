@@ -2,6 +2,7 @@ import numpy as np
 from ncon import ncon
 from math import floor
 import matplotlib.pyplot as plt
+from collections.abc import Iterable
 
 def evaluate_classifier_top_k_accuracy(predictions, y_test, k):
     top_k_predictions = [
@@ -48,7 +49,7 @@ def test_generate_Zi():
     Zi = generate_Zi(N, i)
     assert(np.allclose(ZII, Zi))
 
-def calculate_tanhCost(ϕs, U, labelBitstrings):
+def calculate_tanhCost(ϕs, U, labelBitstrings, A=1):
     '''
     Calculate total tanh Cost
 
@@ -73,8 +74,8 @@ def calculate_tanhCost(ϕs, U, labelBitstrings):
 
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
 
-        currCost = np.tanh(Zoverlaps)
-        currCost = np.einsum('i,i', coeffArr, currCost) / (2*N)
+        currCost = np.tanh(A * Zoverlaps)
+        currCost = np.einsum('i,i', coeffArr, currCost) / (N)
 
         totalCost += currCost
     return totalCost
@@ -204,6 +205,12 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100):
                             array of size (N, qubitNo) each element in this
                             array ∈ {0, 1}
     '''
+    A_iter = False
+    if isinstance(A, Iterable):
+        A_iter = True
+        A_curr = A[0]
+    else:
+        A_curr = A
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
     N = ϕs.shape[0]
 
@@ -211,26 +218,34 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100):
     totalCost = 0.0
     for i in range(qNo):
         #print(f"On Zi : {i}")
+        if A_iter:
+            A_curr = A[i]
+
         Zi = generate_Zi(qNo, i+1)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
         dOdVs = calculate_dOdV(ϕs, U, Zi)
 
-        dZi = A * (np.tanh(A)*np.cosh(A*np.sign(Zoverlaps)*np.absolute(Zoverlaps)))**(-2)
+        #dZi = A * (np.tanh(A)*np.cosh(A*np.sign(Zoverlaps)*np.absolute(Zoverlaps)))**(-2)
+        #dZi = A * (np.tanh(A)*np.cosh(A*Zoverlaps))**(-2)
+        #dZi = A * (np.cosh(A*Zoverlaps))**(-2)
+        dZi = A_curr * (1 - np.tanh(A_curr*Zoverlaps)**2)
         dZi = np.einsum('i,i,ijk->jk', coeffArr, dZi, dOdVs)
 
         dZ += dZi
 
         if costs:
-            currCost = np.tanh(Zoverlaps)
-            currCost = np.einsum('i,i', coeffArr, currCost) / (2*N)
+            currCost = np.tanh(A_curr*Zoverlaps)
+            currCost = np.einsum('i,i', coeffArr, currCost) / N
             totalCost += currCost
 
     # Normalisation leads to instability
     dZ = dZ / (np.sqrt(ncon([dZ, dZ.conj()], [[1, 2], [1, 2]])) + 1e-14)
 
-    U_update = get_Polar(U + f*dZ)
+    #U_update = get_Polar(U + f*dZ)
+    U_update = U + f*dZ
+    U_update = U_update / np.linalg.norm(U_update)
 
     if costs:
         return U_update, totalCost
@@ -279,11 +294,61 @@ def load_data(statePath, labelPath, Nsamples=None):
 
     return outStates, outlabels
 
+def experiment_Zi_distances():
+    np.random.seed(1)
+    prefix = "data_dropbox/mnist/"
+    trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
+    trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
+
+    N = 1000
+
+    trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
+              prefix + trainingLabelPath,
+              N)
+
+    trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
+
+    perfectPred = np.zeros(trainingPred.shape)
+    for i, label in enumerate(trainingLabel):
+        perfectPred[i, label] = 1.
+
+    qNo = 4
+    U = np.eye(16)
+
+    fig, axs = plt.subplots(1, 4, figsize=(20, 5))
+
+    for i in range(qNo):
+        print(f'i: {i}')
+        Zi = generate_Zi(qNo, i+1)
+
+        ZiOverlaps = np.real(calculate_ZOverlap(trainingPred, U, Zi))
+        coeffArr = generate_CoeffArr(trainingLabelBitstrings, i)
+
+        Zi_minus = ZiOverlaps[coeffArr == -1]
+        Zi_plus = ZiOverlaps[coeffArr == 1]
+
+        print(Zi_minus.shape)
+        print(Zi_plus.shape)
+
+        ax = axs[i]
+        ax.hist(Zi_minus, alpha=0.5)
+        ax.hist(Zi_plus, color='r', alpha=0.5)
+        ax.set_title(f'i: {i} ')
+
+    plt.tight_layout(pad=2.0, w_pad=5., h_pad=10.0)
+    plt.show()
+
+
+
+
 
 if __name__=="__main__":
     '''
     Use data from Lewis' dropbox
     '''
+
+    #experiment_Zi_distances()
+
     import time
 
     np.random.seed(1)
@@ -292,17 +357,33 @@ if __name__=="__main__":
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
     N = 1000
-    Nsteps = 50
+    Nsteps = 20
     outputCost = True
 
     trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
               prefix + trainingLabelPath,
               N)
 
+
+    print(trainingPred.shape)
+
+    print(trainingPred[0])
+    print(np.linalg.norm(trainingPred[0]))
+
+    perfectPred = np.zeros(trainingPred.shape)
+    for i, label in enumerate(trainingLabel):
+        perfectPred[i, label] = 1.
+    print(perfectPred[:5])
+
     acc = evaluate_classifier_top_k_accuracy(trainingPred, trainingLabel, 1)
     print(acc)
 
+    acc = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
+    print(f"Perfect prediction: {acc}")
+
+
     U = np.eye(16)
+    U = U / np.linalg.norm(U)
     trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
 
     setTraininglabels = np.unique(trainingLabelBitstrings, axis=0)
@@ -319,18 +400,32 @@ if __name__=="__main__":
     accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
     costInitial = calculate_tanhCost(initialPreds, U, trainingLabelBitstrings)
 
-
     print('Initial accuracy: ', accInitial)
+    print('Initial cost: ', costInitial)
     print("")
 
-    U_update = np.copy(U) + 1e-3*np.random.randn(*U.shape)
+    perfectPred = apply_U(perfectPred, U)
+    accPerfect = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
+    costPerfect = calculate_tanhCost(perfectPred, U, trainingLabelBitstrings)
+
+    print("Perfect acc: ", accPerfect)
+    print("Perfect cost: ", costPerfect)
+
+    #trainingPred = perfectPred
+    #costInitial = costPerfect
+    #accInitial = accPerfect
+
+    U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
 
     start = time.perf_counter()
 
+
     A = 100
-    f0 = 0.2
+    A = [100, 10, 10, 10]
+    # A = [10, 100, 100, 100] is my guess for the best results but not sure
+    f0 = 0.15
     f = np.copy(f0)
-    decayRate = 0.3
+    decayRate = 0.2
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
