@@ -49,7 +49,7 @@ def test_generate_Zi():
     Zi = generate_Zi(N, i)
     assert(np.allclose(ZII, Zi))
 
-def calculate_tanhCost(ϕs, U, labelBitstrings, A=1):
+def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start = 0):
     '''
     Calculate total tanh Cost
 
@@ -62,6 +62,7 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1):
                             padded to length of state space in qubits as an
                             array of size (N, qubitNo) each element in this
                             array ∈ {0, 1}
+    label_start : Start index for the label qubits
     '''
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
     N = ϕs.shape[0]
@@ -69,7 +70,7 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1):
     totalCost = 0.0
 
     for i in range(qNo):
-        Zi = generate_Zi(qNo, i+1)
+        Zi = generate_Zi(qNo, i+1+label_start)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
@@ -190,8 +191,33 @@ def apply_U(ϕs, U):
 
     return np.einsum('lm,im->il', U, ϕs)
 
+def apply_U_rho(ρs, U, qNo, trace_ind=[]):
 
-def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100):
+    out = ncon([U, ρs, U.conj()], ((-2, 1), (-1, 1, 2), (-3, 2)))
+
+    if len(trace_ind) > 0:
+        N = out.shape[0]
+        out = out.reshape(N, *[2]*(qNo*2))
+        contr_string = [-2-i for i in range(N*2)]
+        curr_contr = 1
+        for ind in trace_ind:
+            contr_string[ind] = curr_contr
+            contr_string[N + ind] = curr_contr
+            curr_contr += 1
+
+        contr_string = [-1] + contr_string
+        out = ncon([out,], (contr_string,))
+
+        out_shape = int(2**((len(out.shape) - 1)/2))
+        out = out.reshape(N, out_shape, out_shape)
+
+    # To get the Tr(Pi U ρ U_dagger)
+    # out = np.array([np.sqrt(np.diag(o)) for o in out])
+    return out
+
+
+
+def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
     '''
     Do a single update of U using tanh cost function.
 
@@ -221,7 +247,7 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100):
         if A_iter:
             A_curr = A[i]
 
-        Zi = generate_Zi(qNo, i+1)
+        Zi = generate_Zi(qNo, i+1+label_start)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
@@ -339,6 +365,129 @@ def experiment_Zi_distances():
     plt.show()
 
 
+def train_2_copy():
+    import time
+
+    np.random.seed(1)
+    prefix = "data_dropbox/mnist/"
+    trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
+    trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
+
+    N = 1000
+    Nsteps = 20
+    outputCost = True
+
+    trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
+              prefix + trainingLabelPath,
+              N)
+
+
+    print(trainingPred.shape)
+
+    print(trainingPred[0])
+    print(np.linalg.norm(trainingPred[0]))
+
+    perfectPred = np.zeros(trainingPred.shape)
+    for i, label in enumerate(trainingLabel):
+        perfectPred[i, label] = 1.
+    print(perfectPred[:5])
+
+    acc = evaluate_classifier_top_k_accuracy(trainingPred, trainingLabel, 1)
+    print(acc)
+
+    acc = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
+    print(f"Perfect prediction: {acc}")
+
+
+    trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
+
+    setTraininglabels = np.unique(trainingLabelBitstrings, axis=0)
+
+#    for i in range(4):
+#        print(f"Zi on {i}")
+#        coeffArr = generate_CoeffArr(setTraininglabels, i)
+#
+#        for coeff, bstring in zip(coeffArr, setTraininglabels):
+#            print(f'{bstring} :  {coeff}')
+#        print("")
+
+    # Make two copies
+    trainingPred = np.array([np.kron(im, im) for im in trainingPred])
+    U = np.eye(32)
+    U = U / np.linalg.norm(U)
+
+    initialPreds = apply_U(trainingPred, U)
+    accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
+    costInitial = calculate_tanhCost(initialPreds, U, trainingLabelBitstrings)
+
+    print('Initial accuracy: ', accInitial)
+    print('Initial cost: ', costInitial)
+    print("")
+
+    perfectPred = apply_U(perfectPred, U)
+    accPerfect = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
+    costPerfect = calculate_tanhCost(perfectPred, U, trainingLabelBitstrings)
+
+    print("Perfect acc: ", accPerfect)
+    print("Perfect cost: ", costPerfect)
+
+    #trainingPred = perfectPred
+    #costInitial = costPerfect
+    #accInitial = accPerfect
+
+    U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
+
+    start = time.perf_counter()
+
+
+    A = 100
+    A = [100, 10, 10, 10]
+    # A = [10, 100, 100, 100] is my guess for the best results but not sure
+    f0 = 0.15
+    f = np.copy(f0)
+    decayRate = 0.2
+    def curr_f(decayRate, itNumber, initialRate):
+        return initialRate / (1 + decayRate * itNumber)
+
+    costsList = [costInitial]
+    accuracyList = [accInitial]
+    fList = []
+    for i in range(Nsteps):
+        print(f'Update step {i+1}')
+        f = curr_f(decayRate, i, f0)
+        if f < 5e-4:
+            f = 5e-4
+        print(f'   f: {f}')
+        U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
+                f=f, costs=True, A=A)
+        updatePreds = apply_U(trainingPred, U_update)
+        accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+        print(f'   Accuracy: {accUpdate}')
+        print(f'   Cost: ', costs)
+        print("")
+
+        accuracyList.append(accUpdate)
+        costsList.append(costs)
+        fList.append(f)
+
+    end = time.perf_counter()
+
+    print(f'Elapsed time: {end - start:0.4f} seconds')
+
+    plt.figure()
+    plt.title('Accuracy')
+    plt.plot(accuracyList)
+
+    plt.figure()
+    plt.title('Costs')
+    plt.plot(costsList)
+
+    plt.figure()
+    plt.title('Learning Rates')
+    plt.plot(fList)
+
+    plt.show()
+
 
 
 
@@ -346,6 +495,61 @@ if __name__=="__main__":
     '''
     Use data from Lewis' dropbox
     '''
+    from scipy.stats import unitary_group
+    from functools import reduce
+
+
+
+    N = 10
+    qNo = 2
+    dim_U = 2**qNo
+    U = unitary_group.rvs(dim_U)
+    vecs = np.random.rand(N, dim_U)
+    norm = np.linalg.norm(vecs, axis=1)
+    norm = np.repeat(norm[:, None], dim_U, axis=0)
+    norm = norm.reshape(N, dim_U)
+    vecs = vecs / norm
+
+    ρ = np.array([np.outer(vec, vec.conj()) for vec in vecs])
+
+    rho0 = ρ[0]
+    vec0 = vecs[0]
+    print('Vec0 == ρ0: ', np.allclose(vecs[0]**2, np.diag(rho0)))
+
+    Urho0_ncon = ncon([U, rho0, U.conj()], ((-1, 1) ,(1, 2), (-2, 2)))
+    Urho0_einsum= np.einsum('lm, mk, nk -> ln', U, rho0, U.conj())
+    print('Ncon == einsum :', np.allclose(Urho0_ncon, Urho0_einsum))
+
+    out = apply_U(vecs, U)
+    out0 =  out[0]
+    Uvec0 = ncon([U, vec0], ((-1, 1), (1,)))
+    Uvec0conj = ncon([vec0.conj(), U.conj()], ((1,), (-1, 1)))
+    print('U@v0 == out0 :', np.allclose(U@vec0, out0))
+    print('Uv0 == out0 :', np.allclose(Uvec0, out0))
+    print('Uvec0conj == out0.conj', np.allclose(Uvec0conj, out0.conj()))
+
+    out0_rho = np.outer(out0, out0.conj())
+    Uvec0_rho = np.outer(Uvec0, Uvec0conj)
+
+    print('Uvec0_rho == out0_rho', np.allclose(out0_rho, Uvec0_rho))
+
+    Urho0 = ncon([U, vec0, vec0.conj(), U.conj()], ((-1, 1), (1,), (2,), (-2, 2)))
+
+    print('Out0_rho == Uρ0: ', np.allclose(out0_rho, Urho0))
+    print('Out0_rho == Uρ0_ncon: ', np.allclose(out0_rho, Urho0_ncon))
+
+    print(out0)
+    print(out0*out0.conj())
+    print(np.diag(out0_rho))
+    print(np.diag(Urho0))
+    print('Out0 == Out0_rho', np.allclose(out0*out0.conj(), np.diag(out0_rho)))
+    print('Out0 == ρ0 :', np.allclose(out0*out0.conj(), np.diag(Urho0)))
+
+    Uρ = apply_U_rho(ρ, U, qNo)
+
+    print('Vecrtorised Urho = Urho0 :', np.allclose(Uρ[0], Urho0))
+
+    assert()
 
     #experiment_Zi_distances()
 
