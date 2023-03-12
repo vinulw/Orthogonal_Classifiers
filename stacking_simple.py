@@ -49,7 +49,7 @@ def test_generate_Zi():
     Zi = generate_Zi(N, i)
     assert(np.allclose(ZII, Zi))
 
-def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start = 0):
+def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start=0):
     '''
     Calculate total tanh Cost
 
@@ -65,11 +65,14 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start = 0):
     label_start : Start index for the label qubits
     '''
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
+    print(qNo)
     N = ϕs.shape[0]
 
     totalCost = 0.0
 
+    # TODO : This loop is taking ages....
     for i in range(qNo):
+        print(i+1+label_start)
         Zi = generate_Zi(qNo, i+1+label_start)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
@@ -191,29 +194,32 @@ def apply_U(ϕs, U):
 
     return np.einsum('lm,im->il', U, ϕs)
 
-def apply_U_rho(ρs, U, qNo, trace_ind=[]):
+def apply_U_rho(ρs, U):
 
     out = ncon([U, ρs, U.conj()], ((-2, 1), (-1, 1, 2), (-3, 2)))
-
-    if len(trace_ind) > 0:
-        N = out.shape[0]
-        out = out.reshape(N, *[2]*(qNo*2))
-        contr_string = [-2-i for i in range(N*2)]
-        curr_contr = 1
-        for ind in trace_ind:
-            contr_string[ind] = curr_contr
-            contr_string[N + ind] = curr_contr
-            curr_contr += 1
-
-        contr_string = [-1] + contr_string
-        out = ncon([out,], (contr_string,))
-
-        out_shape = int(2**((len(out.shape) - 1)/2))
-        out = out.reshape(N, out_shape, out_shape)
 
     # To get the Tr(Pi U ρ U_dagger)
     # out = np.array([np.sqrt(np.diag(o)) for o in out])
     return out
+
+def trace_rho(rho, qNo, trace_ind):
+    N = rho.shape[0]
+    rho = rho.reshape(N, *[2]*(qNo*2))
+    contr_string = [-2-i for i in range(qNo*2)]
+    curr_contr = 1
+    for ind in trace_ind:
+        contr_string[ind] = curr_contr
+        contr_string[qNo + ind] = curr_contr
+        curr_contr += 1
+
+    contr_string = [-1] + contr_string
+    rho = ncon([rho,], (contr_string,))
+
+    rho_shape = int(2**((len(rho.shape) - 1)/2))
+    rho = rho.reshape(N, rho_shape, rho_shape)
+
+    return rho
+
 
 
 
@@ -382,47 +388,45 @@ def train_2_copy():
               N)
 
 
-    print(trainingPred.shape)
+    #print(trainingPred.shape)
 
-    print(trainingPred[0])
-    print(np.linalg.norm(trainingPred[0]))
+    #print(trainingPred[0])
+    #print(np.linalg.norm(trainingPred[0]))
 
     perfectPred = np.zeros(trainingPred.shape)
     for i, label in enumerate(trainingLabel):
         perfectPred[i, label] = 1.
-    print(perfectPred[:5])
+    #print(perfectPred[:5])
 
     acc = evaluate_classifier_top_k_accuracy(trainingPred, trainingLabel, 1)
-    print(acc)
+    print('Initial accuracy: ', acc)
 
     acc = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
-    print(f"Perfect prediction: {acc}")
+    #print(f"Perfect prediction: {acc}")
 
 
     trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
 
-    setTraininglabels = np.unique(trainingLabelBitstrings, axis=0)
-
-#    for i in range(4):
-#        print(f"Zi on {i}")
-#        coeffArr = generate_CoeffArr(setTraininglabels, i)
-#
-#        for coeff, bstring in zip(coeffArr, setTraininglabels):
-#            print(f'{bstring} :  {coeff}')
-#        print("")
-
     # Make two copies
+    qNo = 8
+    dim_N = 2**qNo
     trainingPred = np.array([np.kron(im, im) for im in trainingPred])
-    U = np.eye(32)
+    ρPred = np.array([np.outer(pred, pred.conj()) for pred in trainingPred])
+    print(ρPred.shape)
+    U = np.eye(dim_N)
     U = U / np.linalg.norm(U)
 
-    initialPreds = apply_U(trainingPred, U)
+    initialrho = apply_U_rho(ρPred, U)
+    initialPreds = trace_rho(initialrho, qNo, trace_ind=[0, 1, 2, 3])
+    initialPreds = np.diagonal(initialPreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
+
     accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
-    costInitial = calculate_tanhCost(initialPreds, U, trainingLabelBitstrings)
+    costInitial = calculate_tanhCost(trainingPred, U, trainingLabelBitstrings, label_start=4)
 
     print('Initial accuracy: ', accInitial)
     print('Initial cost: ', costInitial)
     print("")
+    assert()
 
     perfectPred = apply_U(perfectPred, U)
     accPerfect = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
@@ -492,6 +496,7 @@ def train_2_copy():
 
 
 if __name__=="__main__":
+    train_2_copy()
     '''
     Use data from Lewis' dropbox
     '''
