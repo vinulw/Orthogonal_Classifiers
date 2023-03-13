@@ -43,9 +43,9 @@ def plot_steps(data=None):
         plt.close()
 
 if __name__=="__main__":
-    data = pd.read_csv('tanh_output_1818210223.csv', sep=' *, *', engine='python')
+    data = pd.read_csv('tanh_jax_output.csv', sep=' *, *', engine='python')
 
-    data_filt = data[data['step'] >= 45]
+    data_filt = data[data['step'] >= 90]
     grouped = data_filt.groupby(['pIndex']).mean().drop(columns=['f', 'step'])
 
     data0 = data[data['step'] == 0].filter(items=['pIndex', 'accuracy', 'cost'])
@@ -60,8 +60,8 @@ if __name__=="__main__":
     print(f'Accuracy range: {np.min(grouped["Δ_accuracy"]):.4f} - {np.max(grouped["Δ_accuracy"]):.4f}')
     print(f'Cost range: {np.min(grouped["Δ_cost"]):.4f} - {np.max(grouped["Δ_cost"]):.4f}')
 
-    cost_range = [-0.05, 0.0]
-    acc_range = [-0.01, 0.01]
+    cost_range = [-0.15, 0.0]
+    acc_range = [-0.5, 0.5]
 
     plt.plot(grouped['pIndex'], grouped['Δ_accuracy'], 'x')
     plt.xlabel('pIndex')

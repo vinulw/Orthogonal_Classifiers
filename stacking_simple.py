@@ -3,6 +3,7 @@ from ncon import ncon
 from math import floor
 import matplotlib.pyplot as plt
 from collections.abc import Iterable
+from opt_einsum import contract
 
 def evaluate_classifier_top_k_accuracy(predictions, y_test, k):
     top_k_predictions = [
@@ -70,9 +71,7 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start=0):
 
     totalCost = 0.0
 
-    # TODO : This loop is taking ages....
-    for i in range(qNo):
-        print(i+1+label_start)
+    for i in range(qNo - label_start):
         Zi = generate_Zi(qNo, i+1+label_start)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
@@ -159,8 +158,10 @@ def calculate_ZOverlap(ϕs, U, Zi):
     Zi : III...Z...III measurement operator
     '''
 
-    Zmeasure = np.einsum('ij,kj,lk,lm,im->i',
-                         np.conj(ϕs), np.conj(U), Zi, U, ϕs)
+    #Zmeasure = np.einsum('ij,kj,lk,lm,im->i',
+    #                     np.conj(ϕs), np.conj(U), Zi, U, ϕs)
+    Zmeasure = contract('ij,kj,lk,lm,im->i',
+                        np.conj(ϕs), np.conj(U), Zi, U, ϕs)
     return Zmeasure
 
 def calculate_dOdV(ϕs, U, Zi):
@@ -176,8 +177,8 @@ def calculate_dOdV(ϕs, U, Zi):
     Zi : III...Z...III measurement operator
     '''
 
-    dOdVs = np.einsum('ij,kl,lm,im->ikj',
-                      np.conj(ϕs), Zi, U, ϕs)
+    dOdVs = contract('ij,kl,lm,im->ikj',
+                    np.conj(ϕs), Zi, U, ϕs)
 
     return dOdVs
 
@@ -192,7 +193,7 @@ def apply_U(ϕs, U):
     U : Stacking unitary
     '''
 
-    return np.einsum('lm,im->il', U, ϕs)
+    return contract('lm,im->il', U, ϕs)
 
 def apply_U_rho(ρs, U):
 
@@ -248,7 +249,8 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
 
     dZ = np.zeros(U.shape, dtype=complex)
     totalCost = 0.0
-    for i in range(qNo):
+    print('Iterated qNo: ', qNo - label_start)
+    for i in range(qNo - label_start):
         #print(f"On Zi : {i}")
         if A_iter:
             A_curr = A[i]
@@ -263,7 +265,7 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
         #dZi = A * (np.tanh(A)*np.cosh(A*Zoverlaps))**(-2)
         #dZi = A * (np.cosh(A*Zoverlaps))**(-2)
         dZi = A_curr * (1 - np.tanh(A_curr*Zoverlaps)**2)
-        dZi = np.einsum('i,i,ijk->jk', coeffArr, dZi, dOdVs)
+        dZi = contract('i,i,ijk->jk', coeffArr, dZi, dOdVs)
 
         dZ += dZi
 
@@ -426,14 +428,13 @@ def train_2_copy():
     print('Initial accuracy: ', accInitial)
     print('Initial cost: ', costInitial)
     print("")
-    assert()
 
-    perfectPred = apply_U(perfectPred, U)
-    accPerfect = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
-    costPerfect = calculate_tanhCost(perfectPred, U, trainingLabelBitstrings)
+    #perfectPred = apply_U(perfectPred, U)
+    #accPerfect = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
+    #costPerfect = calculate_tanhCost(perfectPred, U, trainingLabelBitstrings)
 
-    print("Perfect acc: ", accPerfect)
-    print("Perfect cost: ", costPerfect)
+    #print("Perfect acc: ", accPerfect)
+    #print("Perfect cost: ", costPerfect)
 
     #trainingPred = perfectPred
     #costInitial = costPerfect
@@ -445,17 +446,18 @@ def train_2_copy():
 
 
     A = 100
-    A = [100, 10, 10, 10]
+    A = [500, 5000, 5000, 5000]
     # A = [10, 100, 100, 100] is my guess for the best results but not sure
-    f0 = 0.15
+    f0 = 0.125
     f = np.copy(f0)
-    decayRate = 0.2
+    decayRate = 0.12
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
     costsList = [costInitial]
     accuracyList = [accInitial]
     fList = []
+    Nsteps = 30
     for i in range(Nsteps):
         print(f'Update step {i+1}')
         f = curr_f(decayRate, i, f0)
@@ -463,8 +465,10 @@ def train_2_copy():
             f = 5e-4
         print(f'   f: {f}')
         U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
-                f=f, costs=True, A=A)
-        updatePreds = apply_U(trainingPred, U_update)
+                f=f, costs=True, A=A, label_start=4)
+        updaterho = apply_U_rho(ρPred, U_update)
+        updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+        updatePreds = np.diagonal(updatePreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
         accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
         print(f'   Accuracy: {accUpdate}')
         print(f'   Cost: ', costs)
