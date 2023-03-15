@@ -330,7 +330,8 @@ def load_data(statePath, labelPath, Nsamples=None):
 
 def experiment_Zi_distances():
     np.random.seed(1)
-    prefix = "data_dropbox/mnist/"
+    #prefix = "data_dropbox/mnist/"
+    prefix = "data_dropbox/fashion_mnist/"
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
@@ -372,14 +373,46 @@ def experiment_Zi_distances():
     plt.tight_layout(pad=2.0, w_pad=5., h_pad=10.0)
     plt.show()
 
+def plot_qubit_histogram(predVecs, trainingLabelBitstrings, title, show=True, save_name=None):
+    qNo = int(np.log2(predVecs.shape[1]))
+    U = np.eye(2**qNo)
+
+    fig, axs = plt.subplots(1, qNo, figsize=(20, 5))
+
+    for i in range(qNo):
+        Zi = generate_Zi(qNo, i+1)
+
+        ZiOverlaps = np.real(calculate_ZOverlap(predVecs, U, Zi))
+        coeffArr = generate_CoeffArr(trainingLabelBitstrings, i)
+
+        Zi_minus = ZiOverlaps[coeffArr == -1]
+        Zi_plus = ZiOverlaps[coeffArr == 1]
+
+        ax = axs[i]
+        ax.hist(Zi_minus, alpha=0.5)
+        ax.hist(Zi_plus, color='r', alpha=0.5)
+        ax.set_title(f'i: {i} ')
+
+    plt.tight_layout(pad=2.0, w_pad=5., h_pad=10.0)
+    fig.suptitle(title)
+    if save_name is not None:
+        plt.savefig(save_name)
+    if show:
+        plt.show()
+    plt.close()
+
 
 def train_2_copy():
     import time
 
     np.random.seed(1)
-    prefix = "data_dropbox/mnist/"
+    #prefix = "data_dropbox/mnist/"
+    prefix = "data_dropbox/fashion_mnist/"
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
+
+    fig_save = 'tanh_figs/150323/'
+    show = False
 
     N = 1000
     Nsteps = 20
@@ -445,24 +478,37 @@ def train_2_copy():
     start = time.perf_counter()
 
 
-    A = 100
-    A = [500, 5000, 5000, 5000]
+    # MNIST
+    #As = [[500, 5000, 5000, 5000],
+    #      [5000, 5000, 5000, 5000]]
+    # Fashion MNIST
+    As = [[500, 500, 500, 500],
+          [5000, 5000, 5000, 5000]]
+    Ai = 0
     # A = [10, 100, 100, 100] is my guess for the best results but not sure
+    # MNIST
     f0 = 0.125
+    # Fashion MNIST
+    f0 = 0.10
     f = np.copy(f0)
-    decayRate = 0.12
+    decayRate = 0.025
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
     costsList = [costInitial]
     accuracyList = [accInitial]
     fList = []
-    Nsteps = 30
-    for i in range(Nsteps):
-        print(f'Update step {i+1}')
+    Nsteps = 200
+    i = 0
+    tol = 0.05
+    plot_qubit_histogram(initialPreds, trainingLabelBitstrings,
+            'Initial histogram', show=False, save_name=fig_save + 'initial_hist.png')
+    for n in range(Nsteps):
+        A = As[Ai]
+        print(f'Update step {n+1}')
         f = curr_f(decayRate, i, f0)
-        if f < 5e-4:
-            f = 5e-4
+        if f < 2e-2:
+            f = 2e-2
         print(f'   f: {f}')
         U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
                 f=f, costs=True, A=A, label_start=4)
@@ -478,6 +524,29 @@ def train_2_copy():
         costsList.append(costs)
         fList.append(f)
 
+        #if n > 10 and np.std(costsList[:-10]) <= tol and Ai < len(Ai):
+        # For running with MNIST
+        #if n == 30:
+        #    print('Resetting Ai and f0')
+        #    Ai += 1
+        #    f0 = f0*0.8
+        #    i = 0
+        # For running with Fashion MNIST
+        if n == 50:
+            print('Resetting Ai and f0')
+            Ai += 1
+            f0 = f0*0.8
+            i = 0
+
+        if n % 10 == 0:
+            save_name = fig_save + f'step_{n}_hist.png'
+            plot_qubit_histogram(updatePreds, trainingLabelBitstrings,
+                    title=f'Step: {n}', show=False, save_name=save_name)
+
+        i += 1
+
+
+
     end = time.perf_counter()
 
     print(f'Elapsed time: {end - start:0.4f} seconds')
@@ -485,14 +554,17 @@ def train_2_copy():
     plt.figure()
     plt.title('Accuracy')
     plt.plot(accuracyList)
+    plt.savefig(fig_save + 'accuracy.png')
 
     plt.figure()
     plt.title('Costs')
     plt.plot(costsList)
+    plt.savefig(fig_save + 'costs.png')
 
     plt.figure()
     plt.title('Learning Rates')
     plt.plot(fList)
+    plt.savefig(fig_save + 'lr.png')
 
     plt.show()
 
