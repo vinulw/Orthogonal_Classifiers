@@ -404,6 +404,11 @@ def plot_qubit_histogram(predVecs, trainingLabelBitstrings, title, show=True, sa
 
 def train_2_copy():
     import time
+    from datetime import datetime
+    import os
+
+    now = datetime.now()
+    now = now.strftime('%d%m%Y%H%M%S')
 
     np.random.seed(1)
     #prefix = "data_dropbox/mnist/"
@@ -411,7 +416,10 @@ def train_2_copy():
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
-    fig_save = 'tanh_figs/150323/'
+    fig_save = f'tanh_figs/{now}/'
+    if not os.path.exists(fig_save):
+        os.makedirs(fig_save)
+        print(f'Made figure directory: {fig_save}')
     show = False
 
     N = 1000
@@ -491,7 +499,7 @@ def train_2_copy():
     # Fashion MNIST
     f0 = 0.10
     f = np.copy(f0)
-    decayRate = 0.025
+    decayRate = 0.035
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
@@ -507,8 +515,8 @@ def train_2_copy():
         A = As[Ai]
         print(f'Update step {n+1}')
         f = curr_f(decayRate, i, f0)
-        if f < 2e-2:
-            f = 2e-2
+        if f < 2e-3:
+            f = 2e-3
         print(f'   f: {f}')
         U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
                 f=f, costs=True, A=A, label_start=4)
