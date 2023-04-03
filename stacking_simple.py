@@ -427,6 +427,7 @@ def train_2_copy():
     N = 1000
     Nsteps = 20
     outputCost = True
+    ortho_step = 10
 
     trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
               prefix + trainingLabelPath,
@@ -514,7 +515,7 @@ def train_2_copy():
     costsList = [costInitial]
     accuracyList = [accInitial]
     fList = []
-    Nsteps = 500
+    Nsteps = 200
     i = 0
     tol = 0.05
     plot_qubit_histogram(initialPreds, trainingLabelBitstrings,
@@ -564,6 +565,9 @@ def train_2_copy():
                     title=f'Step: {n}', show=False, save_name=save_name)
             classifier_name = classifier_dir + f'step_{n}.npy'
             np.save(classifier_name, U_update)
+
+        if n % ortho_step:
+            U_update = get_Polar(U_update)
 
         i += 1
 
