@@ -6,8 +6,30 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+def plot_train_data(csv_path):
+    with open(csv_path, 'r') as f:
+        data = np.loadtxt(f, delimiter=',')
+    accuracies, costs, lrs = data.astype(float).T
+    plt.figure()
+    plt.plot(accuracies)
+    plt.title('Accuracies')
+
+    plt.figure()
+    plt.plot(costs)
+    plt.title('Costs')
+
+    plt.figure()
+    plt.plot(lrs)
+    plt.title('Learning Rates')
+
+    plt.show()
+
+
 
 if __name__=="__main__":
+    # path = 'tanh_train/03042023120628/run_data.csv'
+    # plot_train_data(path)
+
     np.random.seed(1)
     N = 1000
     prefix = "data_dropbox/fashion_mnist/"
@@ -25,7 +47,8 @@ if __name__=="__main__":
     ρPred = np.array([np.outer(pred, pred.conj()) for pred in trainingPred])
     qNo = 8
 
-    classfier_path = 'tanh_train/03042023110838/classifier_U/'
+    # classfier_path = 'tanh_train/03042023110838/classifier_U/'
+    classfier_path = 'tanh_train/03042023120628/classifier_U/'
     fnames = os.listdir(classfier_path)
 
     accuracies = np.zeros(len(fnames))
@@ -53,8 +76,16 @@ if __name__=="__main__":
     sortind = np.argsort(steps)
     steps =  steps[sortind]
     accuracies, accuracies_Polar = accuracies[sortind], accuracies_Polar[sortind]
-    plt.plot(steps, accuracies, '.--', label='Non-orthogonal')
+    plt.plot(steps, accuracies, '.--', label='Non Orthogonal')
     plt.plot(steps, accuracies_Polar, '.--', label='Orthogonal')
+    plt.legend()
+
+    # Save the output
+    save_path = 'tanh_train/03042023120628/ortho_acc_data.csv'
+    header = 'step, accuracies_non_orth, accuracies_orth'
+    data = np.array([steps, accuracies, accuracies_Polar])
+    data = data.T
+    np.savetxt(save_path, data, delimiter=',', header=header)
     plt.show()
 
 
