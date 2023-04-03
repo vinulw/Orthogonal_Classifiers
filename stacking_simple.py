@@ -416,10 +416,10 @@ def train_2_copy():
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
-    fig_save = f'tanh_figs/{now}/'
-    if not os.path.exists(fig_save):
-        os.makedirs(fig_save)
-        print(f'Made figure directory: {fig_save}')
+    save_dir = f'tanh_train/{now}/'
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        print(f'Made save directory: {save_dir}')
     show = False
 
     N = 1000
@@ -470,20 +470,17 @@ def train_2_copy():
     print('Initial cost: ', costInitial)
     print("")
 
-    #perfectPred = apply_U(perfectPred, U)
-    #accPerfect = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
-    #costPerfect = calculate_tanhCost(perfectPred, U, trainingLabelBitstrings)
-
-    #print("Perfect acc: ", accPerfect)
-    #print("Perfect cost: ", costPerfect)
-
-    #trainingPred = perfectPred
-    #costInitial = costPerfect
-    #accInitial = accPerfect
-
     U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
 
     start = time.perf_counter()
+
+    # Saving classifiers
+    save_interval = 10
+    classifier_dir = save_dir + 'classifier_U/'
+    if not os.path.exists(classifier_dir):
+        os.makedirs(classifier_dir)
+        print(f'Made classifier directory: {classifier_dir}')
+
 
 
     # MNIST
@@ -503,14 +500,23 @@ def train_2_copy():
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
+    # CSV file to track training
+    csv_data_file = save_dir + 'run_data.csv'
+
+    with open(csv_data_file, 'w') as f:
+        header = 'accuracy, cost, lr'
+        line = np.array([accInitial, costInitial, f0])
+        np.savetxt(f, line.reshape(1, -1), delimiter=', ', header=header)
+
+
     costsList = [costInitial]
     accuracyList = [accInitial]
     fList = []
-    Nsteps = 200
+    Nsteps = 500
     i = 0
     tol = 0.05
     plot_qubit_histogram(initialPreds, trainingLabelBitstrings,
-            'Initial histogram', show=False, save_name=fig_save + 'initial_hist.png')
+            'Initial histogram', show=False, save_name=save_dir + 'initial_hist.png')
     for n in range(Nsteps):
         A = As[Ai]
         print(f'Update step {n+1}')
@@ -532,6 +538,10 @@ def train_2_copy():
         costsList.append(costs)
         fList.append(f)
 
+        with open(csv_data_file, 'a') as fle:
+            line = np.array([accUpdate, costs, f])
+            np.savetxt(fle, line.reshape(1, -1), delimiter=', ')
+
         #if n > 10 and np.std(costsList[:-10]) <= tol and Ai < len(Ai):
         # For running with MNIST
         #if n == 30:
@@ -546,10 +556,12 @@ def train_2_copy():
             f0 = f0*0.8
             i = 0
 
-        if n % 10 == 0:
-            save_name = fig_save + f'step_{n}_hist.png'
+        if n % save_interval == 0:
+            save_name = save_dir + f'step_{n}_hist.png'
             plot_qubit_histogram(updatePreds, trainingLabelBitstrings,
                     title=f'Step: {n}', show=False, save_name=save_name)
+            classifier_name = classifier_dir + f'step_{n}.npy'
+            np.save(classifier_name, U_update)
 
         i += 1
 
@@ -562,17 +574,17 @@ def train_2_copy():
     plt.figure()
     plt.title('Accuracy')
     plt.plot(accuracyList)
-    plt.savefig(fig_save + 'accuracy.png')
+    plt.savefig(save_dir + 'accuracy.png')
 
     plt.figure()
     plt.title('Costs')
     plt.plot(costsList)
-    plt.savefig(fig_save + 'costs.png')
+    plt.savefig(save_dir + 'costs.png')
 
     plt.figure()
     plt.title('Learning Rates')
     plt.plot(fList)
-    plt.savefig(fig_save + 'lr.png')
+    plt.savefig(save_dir + 'lr.png')
 
     plt.show()
 
