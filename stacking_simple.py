@@ -287,9 +287,11 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
 
 def get_Polar(M):
     """ Return the polar decomposition of M """
-    from svd_robust import svd
-    x,y,z =  svd(M)
-    M = ncon([x,z],([-1,1],[1,-2]))
+#    from svd_robust import svd
+#    x,y,z =  svd(M)
+#    M = ncon([x,z],([-1,1],[1,-2]))
+    from scipy.linalg import polar
+    M, _ = polar(M)
     return M
 
 def load_data(statePath, labelPath, Nsamples=None):
