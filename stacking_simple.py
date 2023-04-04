@@ -427,7 +427,6 @@ def train_2_copy():
     N = 1000
     Nsteps = 20
     outputCost = True
-    ortho_step = 10
 
     trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
               prefix + trainingLabelPath,
@@ -454,20 +453,27 @@ def train_2_copy():
     trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
 
     # Make two copies
-    qNo = 8
+    Ncopies = 1
+    label_start = 0
+    qNo = 4*Ncopies
     dim_N = 2**qNo
-    trainingPred = np.array([np.kron(im, im) for im in trainingPred])
+
+    if Ncopies == 2:
+        trainingPred = np.array([np.kron(im, im) for im in trainingPred])
     ρPred = np.array([np.outer(pred, pred.conj()) for pred in trainingPred])
     print(ρPred.shape)
     U = np.eye(dim_N)
     U = U / np.linalg.norm(U)
 
     initialrho = apply_U_rho(ρPred, U)
-    initialPreds = trace_rho(initialrho, qNo, trace_ind=[0, 1, 2, 3])
-    initialPreds = np.diagonal(initialPreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
+    if Ncopies == 2:
+        initialrho_ = trace_rho(initialrho, qNo, trace_ind=[0, 1, 2, 3])
+    else:
+        initialrho_ = trace_rho(initialrho, qNo, trace_ind=[])
+    initialPreds = np.diagonal(initialrho_, axis1=1, axis2=2) # Get Tr(Pi ρ)
 
     accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
-    costInitial = calculate_tanhCost(trainingPred, U, trainingLabelBitstrings, label_start=4)
+    costInitial = calculate_tanhCost(trainingPred, U, trainingLabelBitstrings, label_start=label_start)
 
     print('Initial accuracy: ', accInitial)
     print('Initial cost: ', costInitial)
@@ -489,10 +495,17 @@ def train_2_copy():
     # MNIST
     #As = [[500, 5000, 5000, 5000],
     #      [5000, 5000, 5000, 5000]]
-    # Fashion MNIST
+    # Fashion MNIST 2 copy
     As = [[500, 500, 500, 500],
           [5000, 5000, 5000, 5000]]
+    switch_index = [50]
+    Nsteps = 300
+    # Fashion MNIST 1 copy
+    As = [[10, 10, 10, 10],
+          [100, 100, 100, 100]]
     Ai = 0
+    switch_index = [200]
+    Nsteps = 600
     # A = [10, 100, 100, 100] is my guess for the best results but not sure
     # MNIST
     f0 = 0.125
@@ -500,6 +513,10 @@ def train_2_copy():
     f0 = 0.10
     f = np.copy(f0)
     decayRate = 0.035
+    # Fashion MNIST 1 copy
+    f0 = 0.11
+    f = np.copy(f0)
+    decayRate = 0.025
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
@@ -515,7 +532,7 @@ def train_2_copy():
     costsList = [costInitial]
     accuracyList = [accInitial]
     fList = []
-    Nsteps = 200
+    ortho_step = Nsteps + 10
     i = 0
     tol = 0.05
     plot_qubit_histogram(initialPreds, trainingLabelBitstrings,
@@ -528,9 +545,12 @@ def train_2_copy():
             f = 2e-3
         print(f'   f: {f}')
         U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
-                f=f, costs=True, A=A, label_start=4)
+                f=f, costs=True, A=A, label_start=label_start)
         updaterho = apply_U_rho(ρPred, U_update)
-        updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+        if Ncopies == 2:
+            updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+        else:
+            updatePreds = trace_rho(updaterho, qNo, trace_ind=[])
         updatePreds = np.diagonal(updatePreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
         accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
         print(f'   Accuracy: {accUpdate}')
@@ -553,7 +573,7 @@ def train_2_copy():
         #    f0 = f0*0.8
         #    i = 0
         # For running with Fashion MNIST
-        if n == 50:
+        if n in switch_index:
             print('Resetting Ai and f0')
             Ai += 1
             f0 = f0*0.8

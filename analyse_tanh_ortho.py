@@ -27,8 +27,10 @@ def plot_train_data(csv_path):
 
 
 if __name__=="__main__":
-    # path = 'tanh_train/03042023120628/run_data.csv'
-    # plot_train_data(path)
+    path = 'tanh_train/04042023182002/run_data.csv'
+    plot_train_data(path)
+
+    assert()
 
     np.random.seed(1)
     N = 1000
