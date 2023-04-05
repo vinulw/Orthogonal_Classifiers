@@ -5,6 +5,10 @@ import matplotlib.pyplot as plt
 from collections.abc import Iterable
 from opt_einsum import contract
 
+import os
+from datetime import datetime
+import time
+
 def evaluate_classifier_top_k_accuracy(predictions, y_test, k):
     top_k_predictions = [
         np.argpartition(image_prediction, -k)[-k:] for image_prediction in predictions
@@ -403,12 +407,163 @@ def plot_qubit_histogram(predVecs, trainingLabelBitstrings, title, show=True, sa
         plt.show()
     plt.close()
 
+def continue_training(U, Ncopies=2,
+        seed=1, label_start=4):
+
+    # Fashion MNIST 2 copy
+    As = [[500, 500, 500, 500],
+          [5000, 5000, 5000, 5000]]
+    Ai = 0
+    switch_index = [50]
+    Nsteps = 300
+    ortho_step = Nsteps + 10
+
+    def curr_f(decayRate, itNumber, initialRate):
+        return initialRate / (1 + decayRate * itNumber)
+
+    # Fashion MNIST
+    f0 = 0.10
+    f = np.copy(f0)
+    decayRate = 0.035
+    now = datetime.now()
+    now = now.strftime('%d%m%Y%H%M%S')
+
+    np.random.seed(seed)
+
+    prefix = "data_dropbox/fashion_mnist/"
+    trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
+    trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
+
+    save_dir = f'tanh_train/{now}/'
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+        print(f'Made save directory: {save_dir}')
+
+    N = 1000
+    trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
+              prefix + trainingLabelPath,
+              N)
+
+    trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
+
+    qNo = 4*Ncopies
+    dim_N = 2**qNo
+
+    if Ncopies == 2:
+        trainingPred = np.array([np.kron(im, im) for im in trainingPred])
+    ρPred = np.array([np.outer(pred, pred.conj()) for pred in trainingPred])
+
+    initialrho = apply_U_rho(ρPred, U)
+    if Ncopies == 2:
+        initialrho_ = trace_rho(initialrho, qNo, trace_ind=[0, 1, 2, 3])
+    else:
+        initialrho_ = trace_rho(initialrho, qNo, trace_ind=[])
+    initialPreds = np.diagonal(initialrho_, axis1=1, axis2=2) # Get Tr(Pi ρ)
+
+    accInitial = evaluate_classifier_top_k_accuracy(initialPreds, trainingLabel, 1)
+    costInitial = calculate_tanhCost(trainingPred, U, trainingLabelBitstrings,
+                                     label_start=label_start)
+
+    print('Initial accuracy: ', accInitial)
+    print('Initial cost: ', costInitial)
+    print("")
+
+    # Saving classifiers
+    save_interval = 10
+    classifier_dir = save_dir + 'classifier_U/'
+    if not os.path.exists(classifier_dir):
+        os.makedirs(classifier_dir)
+        print(f'Made classifier directory: {classifier_dir}')
+
+    # CSV file to track training
+    csv_data_file = save_dir + 'run_data.csv'
+
+    with open(csv_data_file, 'w') as f:
+        header = 'accuracy, cost, lr'
+        line = np.array([accInitial, costInitial, f0])
+        np.savetxt(f, line.reshape(1, -1), delimiter=', ', header=header)
+
+    costsList = [costInitial]
+    accuracyList = [accInitial]
+    fList = []
+    i = 0
+    U_update = np.copy(U)
+    plot_qubit_histogram(initialPreds, trainingLabelBitstrings,
+            'Initial histogram', show=False, save_name=save_dir + 'initial_hist.png')
+
+    start = time.perf_counter()
+
+
+    for n in range(Nsteps):
+        A = As[Ai]
+        print(f'Update step {n+1}')
+        f = curr_f(decayRate, i, f0)
+        if f < 2e-3:
+            f = 2e-3
+        print(f'   f: {f}')
+        U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
+                f=f, costs=True, A=A, label_start=label_start)
+        updaterho = apply_U_rho(ρPred, U_update)
+        if Ncopies == 2:
+            updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+        else:
+            updatePreds = trace_rho(updaterho, qNo, trace_ind=[])
+        updatePreds = np.diagonal(updatePreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
+        accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+        print(f'   Accuracy: {accUpdate}')
+        print(f'   Cost: ', costs)
+        print("")
+
+        accuracyList.append(accUpdate)
+        costsList.append(costs)
+        fList.append(f)
+
+        with open(csv_data_file, 'a') as fle:
+            line = np.array([accUpdate, costs, f])
+            np.savetxt(fle, line.reshape(1, -1), delimiter=', ')
+
+        if n in switch_index:
+            print('Resetting Ai and f0')
+            Ai += 1
+            f0 = f0*0.8
+            i = 0
+
+        if n % save_interval == 0:
+            save_name = save_dir + f'step_{n}_hist.png'
+            plot_qubit_histogram(updatePreds, trainingLabelBitstrings,
+                    title=f'Step: {n}', show=False, save_name=save_name)
+            classifier_name = classifier_dir + f'step_{n}.npy'
+            np.save(classifier_name, U_update)
+
+        if n % ortho_step:
+            U_update = get_Polar(U_update)
+
+        i += 1
+
+
+
+    end = time.perf_counter()
+
+    print(f'Elapsed time: {end - start:0.4f} seconds')
+
+    plt.figure()
+    plt.title('Accuracy')
+    plt.plot(accuracyList)
+    plt.savefig(save_dir + 'accuracy.png')
+
+    plt.figure()
+    plt.title('Costs')
+    plt.plot(costsList)
+    plt.savefig(save_dir + 'costs.png')
+
+    plt.figure()
+    plt.title('Learning Rates')
+    plt.plot(fList)
+    plt.savefig(save_dir + 'lr.png')
+
+    plt.show()
 
 def train_2_copy():
-    import time
-    from datetime import datetime
-    import os
-
     now = datetime.now()
     now = now.strftime('%d%m%Y%H%M%S')
 
@@ -425,30 +580,13 @@ def train_2_copy():
     show = False
 
     N = 1000
-    Nsteps = 20
-    outputCost = True
 
     trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
               prefix + trainingLabelPath,
               N)
 
-
-    #print(trainingPred.shape)
-
-    #print(trainingPred[0])
-    #print(np.linalg.norm(trainingPred[0]))
-
-    perfectPred = np.zeros(trainingPred.shape)
-    for i, label in enumerate(trainingLabel):
-        perfectPred[i, label] = 1.
-    #print(perfectPred[:5])
-
     acc = evaluate_classifier_top_k_accuracy(trainingPred, trainingLabel, 1)
     print('Initial accuracy: ', acc)
-
-    acc = evaluate_classifier_top_k_accuracy(perfectPred, trainingLabel, 1)
-    #print(f"Perfect prediction: {acc}")
-
 
     trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
 
@@ -618,6 +756,10 @@ def train_2_copy():
 
 
 if __name__=="__main__":
+    U = np.load('tanh_train/03042023120628/classifier_U/step_470.npy')
+
+    continue_training(U)
+    assert()
     train_2_copy()
     '''
     Use data from Lewis' dropbox
