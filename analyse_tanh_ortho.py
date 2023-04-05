@@ -24,9 +24,70 @@ def plot_train_data(csv_path):
 
     plt.show()
 
+def plot_schmidt_Us(U_path):
+    import time
+    from svd_robust import svd
+    from matplotlib.widgets import Slider
+    from tqdm import tqdm
+
+    fles = os.listdir(U_path)
+    print(fles)
+
+    steps = [None] * len(fles)
+    Us = [None] * len(fles)
+    for i, f in enumerate(fles):
+        steps[i] = int(f[5:-4])
+        Us[i] = np.load(os.path.join(U_path, f), allow_pickle=True)
+
+    steps, Us = zip(*sorted(zip(steps, Us), key=lambda x: x[0]))
+
+    U = Us[-1] # Get the last U
+
+    # Look at the Schmidt spectrum
+    schmidts = [None] * len(fles)
+    maxLen = Us[0].shape[0]
+    for i, U in tqdm(enumerate(Us), total=len(Us)):
+        _, S, _ = svd(U)
+        #lenS = len(S)
+        #schmidts[i] = np.pad(S, (0, maxLen-lenS), constant_value=(0, 0))
+        schmidts[i] = S
+
+    xs = range(maxLen)
+
+    fig, ax = plt.subplots()
+    ax.set_ylim(0.0, 0.4)
+    line, = ax.plot(xs, schmidts[0], '--')
+    txt = ax.annotate(f'Step: {steps[0]}', (0., 0.35))
+
+    # adjust the main plot to make room for the sliders
+    fig.subplots_adjust(left=0.25, bottom=0.25)
+    # Make a horizontal slider to control the frequency.
+    axstep = fig.add_axes([0.25, 0.1, 0.65, 0.03])
+    step_slider = Slider(
+        ax=axstep,
+        label='Step Index',
+        valmin=0,
+        valmax=len(schmidts)-1,
+        valstep=1.,
+        valinit=0,
+    )
+    # The function to be called anytime a slider's value changes
+    def update(val):
+        i = int(step_slider.val)
+        line.set_ydata(schmidts[i])
+        txt.set_text(f'Step: {steps[i]}')
+        fig.canvas.draw_idle()
+
+
+    # register the update function with each slider
+    step_slider.on_changed(update)
+    plt.show()
+
 
 
 if __name__=="__main__":
+    plot_schmidt_Us('tanh_train/03042023120628/classifier_U/')
+    assert()
     path = 'tanh_train/04042023182002/run_data.csv'
     plot_train_data(path)
 
