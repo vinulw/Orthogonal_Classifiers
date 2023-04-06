@@ -31,7 +31,7 @@ def plot_schmidt_Us(U_path):
     from tqdm import tqdm
 
     fles = os.listdir(U_path)
-    print(fles)
+    print('Loading Us : ', U_path)
 
     steps = [None] * len(fles)
     Us = [None] * len(fles)
@@ -86,12 +86,63 @@ def plot_schmidt_Us(U_path):
 
 
 if __name__=="__main__":
-    plot_schmidt_Us('tanh_train/03042023120628/classifier_U/')
-    assert()
-    path = 'tanh_train/04042023182002/run_data.csv'
-    plot_train_data(path)
+    #plot_schmidt_Us('tanh_train/03042023120628/classifier_U/')
+    #path = 'tanh_train/04042023182002/run_data.csv'
+    #plot_train_data(path)
 
+    from svd_robust import svd
+    from ncon import ncon
+    np.set_printoptions(precision=3)
+    U_path = 'tanh_train/03042023120628/classifier_U/'
+
+    fles = os.listdir(U_path)
+    print('Loading Us : ', U_path)
+
+    steps = [None] * len(fles)
+    Us = [None] * len(fles)
+    for i, f in enumerate(fles):
+        steps[i] = int(f[5:-4])
+        Us[i] = np.load(os.path.join(U_path, f), allow_pickle=True)
+
+    steps, Us = zip(*sorted(zip(steps, Us), key=lambda x: x[0]))
+
+    U = Us[-1] # Get the last U
+
+    U_trunc, S, V = svd(U)
+
+    U_trunc = U_trunc[:, :16]
+    S_trunc = S[:16]
+    print('Singualr values sum: ', np.sum(S))
+    print('Truncated singualr values sum: ', np.sum(S_trunc))
     assert()
+
+    V_trunc = V[:16, :]
+
+#    V0 = V[0]
+#    V1 = V[1]
+#
+#    V0 = V0.reshape(16, 16)
+#    V1 = V1.reshape(16, 16)
+#
+#    V0V1 = ncon([V0, V1.conj()], ((1, -1), (1, -2)))
+#    V0V0 = ncon([V0, V0.conj()], ((1, -1), (1, -2)))
+#    V1V1 = ncon([V1, V1.conj()], ((1, -1), (1, -2)))
+#
+#    # Truncation
+#    V0V1[V0V1 < 9e-3] = 0
+#    V0V0[V0V0 < 9e-3] = 0
+#    V1V1[V1V1 < 9e-3] = 0
+#
+#    print('V0V1')
+#    print(V0V1)
+#    print()
+#    print('V0V0')
+#    print(V0V0)
+#    print('V1V1')
+#    print(V1V1)
+
+    #U_trunc = U_trunc @ np.diag(S_trunc) @ V_trunc
+    U_trunc = U_trunc @  V_trunc
 
     np.random.seed(1)
     N = 1000
@@ -109,6 +160,75 @@ if __name__=="__main__":
     trainingPred = np.array([np.kron(im, im) for im in trainingPred])
     ρPred = np.array([np.outer(pred, pred.conj()) for pred in trainingPred])
     qNo = 8
+
+#    updaterho = apply_U_rho(ρPred, U_trunc)
+#    updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+#    updatePreds = np.diagonal(updatePreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
+#    accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+#
+#    print('Truncated U accurcy: ', accUpdate)
+
+    U_polar = get_Polar(U)
+    updaterho = apply_U_rho(ρPred, U_polar)
+    updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+    updatePreds = np.diagonal(updatePreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
+    accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+    print('U polar accurcy: ', accUpdate)
+
+    n_step = 20
+    U = Us[-1] # Get the last U
+
+    def dV(M, V):
+        M_dag = M.conj().T
+        M = M.reshape(16, 16, 16, 16)
+        M_dag = M_dag.reshape(16, 16, 16, 16)
+        V = V.reshape(16, 16, 16, 16)
+        dV = ncon([M, M_dag, V], ((-1, -2, 1, -4), (1, 2, 3, 4), (3, 4, -3, 2)))
+        dV = dV.reshape(16**2, 16**2)
+        return dV
+
+    def stochastic_update_V(V, alpha=0.1):
+        dim = V.shape
+        V_update = V + alpha*(np.random.rand(dim), + 1j*np.random.rand(dim))
+        V_update = get_Polar(V)
+        return V_update
+
+    def cost(V, M):
+        V_dag = V.conj().T
+        M_dag = M.conj().T
+
+        M = M.reshape(16, 16, 16, 16)
+        V = V.reshape(16, 16, 16, 16)
+        M_dag = M_dag.reshape(16, 16, 16, 16)
+        V_dag = V_dag.reshape(16, 16, 16, 16)
+
+
+
+
+    V = np.copy(U_trunc) # Initial V
+    α = -0.5
+    updaterho = apply_U_rho(ρPred, V)
+    updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+    updatePreds = np.diagonal(updatePreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
+    accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+    print('V initial accurcy: ', accUpdate)
+
+    updaterho = apply_U_rho(ρPred, U)
+    updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+    updatePreds = np.diagonal(updatePreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
+    accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+    print('Target accurcy: ', accUpdate)
+    for i in range(n_step):
+        print('Current step: ', i)
+        dV_curr = dV(U, V)
+        V = get_Polar(V + α*dV_curr)
+
+        updaterho = apply_U_rho(ρPred, V)
+        updatePreds = trace_rho(updaterho, qNo, trace_ind=[0, 1, 2, 3])
+        updatePreds = np.diagonal(updatePreds, axis1=1, axis2=2) # Get Tr(Pi ρ)
+        accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+        print('V accurcy: ', accUpdate)
+    assert()
 
     # classfier_path = 'tanh_train/03042023110838/classifier_U/'
     classfier_path = 'tanh_train/03042023120628/classifier_U/'
