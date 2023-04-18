@@ -13,9 +13,9 @@ Tools
 
 def load_data(dataset):
     initial_label_qubits = np.load(
-        "data/" + dataset + "/new_ortho_d_final_vs_training_predictions.npy")[15]
+        "data_dropbox/" + dataset + "/new_ortho_d_final_vs_training_predictions.npy")[15]
     y_train = np.load(
-        "data/" + dataset + "/ortho_d_final_vs_training_predictions_labels.npy")
+        "data_dropbox/" + dataset + "/ortho_d_final_vs_training_predictions_labels.npy")
 
     # Normalise predictions
     initial_label_qubits = np.array(
@@ -67,10 +67,10 @@ def evaluate_stacking_unitary(U, dataset="fashion_mnist", verbose=1):
     Load Test Data
     """
     initial_label_qubits = np.load(
-        "data/" + dataset + "/new_ortho_d_final_vs_test_predictions.npy"
+        "data_dropbox/" + dataset + "/new_ortho_d_final_vs_test_predictions.npy"
     )[15]
     y_test = np.load(
-        "data/" + dataset + "/ortho_d_final_vs_test_predictions_labels.npy"
+        "data_dropbox/" + dataset + "/ortho_d_final_vs_test_predictions_labels.npy"
     )
 #    initial_label_qubits = np.load(
 #        "data/" + dataset + "/new_ortho_d_final_vs_training_predictions.npy"
@@ -660,14 +660,16 @@ def plot_update(experiment_name, dataset):
 
 if __name__ == "__main__":
 
-    n_copies = 1
-    dataset = "mnist"
+    n_copies = 2
+    dataset = "fashion_mnist"
     experiment_name = "new_cost_func_outer"
     # plot_update(experiment_name, dataset)
 
-#    initial_V = initialise_V(n_copies, dataset)
-#    np.save("initialV_011122", initial_V)
+    #initial_V = initialise_V(n_copies, dataset)
+    #np.save("initialV_120423", initial_V)
     initial_V = np.load("initialV_011122.npy")
+    print(initial_V.shape)
+    assert()
     print("Loaded saved initial_V")
     # DMRG_update(initial_V, 1000, experiment_name, dataset)
     stochastic_update(initial_V, 1e02, experiment_name, dataset)
