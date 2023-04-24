@@ -69,18 +69,27 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start=0):
                             array ∈ {0, 1}
     label_start : Start index for the label qubits
     '''
+    A_iter = False
+    if isinstance(A, Iterable):
+        A_iter = True
+        A_curr = A[0]
+    else:
+        A_curr = A
+
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
     N = ϕs.shape[0]
 
     totalCost = 0.0
 
     for i in range(qNo - label_start):
+        if A_iter:
+            A_curr = A[i]
         Zi = generate_Zi(qNo, i+1+label_start)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
 
-        currCost = np.tanh(A * Zoverlaps)
+        currCost = np.tanh(A_curr * Zoverlaps)
         currCost = np.einsum('i,i', coeffArr, currCost) / (N)
 
         totalCost += currCost
@@ -590,7 +599,7 @@ def train_2_copy():
     trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
 
     # Make two copies
-    Ncopies = 1
+    Ncopies = 2
     label_start = 0
     qNo = 4*Ncopies
     dim_N = 2**qNo
@@ -755,11 +764,12 @@ def train_2_copy():
 
 
 if __name__=="__main__":
-    U = np.load('tanh_train/03042023120628/classifier_U/step_470.npy')
-
-    continue_training(U)
-    assert()
     train_2_copy()
+    assert()
+    U = np.load('tanh_train/03042023120628/classifier_U/step_470.npy')
+    continue_training(U)
+
+    assert()
     '''
     Use data from Lewis' dropbox
     '''
