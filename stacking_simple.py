@@ -683,6 +683,8 @@ def train_2_copy():
     tol = 0.05
     plot_qubit_histogram(initialPreds, trainingLabelBitstrings,
             'Initial histogram', show=False, save_name=save_dir + 'initial_hist.png')
+    print(label_start)
+    assert()
     for n in range(Nsteps):
         A = As[Ai]
         print(f'Update step {n+1}')

@@ -1,6 +1,8 @@
 from opt_einsum import contract
 from stacking_simple import generate_Zi, generate_CoeffArr
-from stacking_simple import load_data
+from stacking_simple import load_data, get_Polar
+from stacking_simple import apply_U
+from stacking_simple import evaluate_classifier_top_k_accuracy
 from functools import reduce
 from datetime import datetime
 from ncon import ncon
@@ -8,6 +10,7 @@ from collections.abc import Iterable
 
 import numpy as np
 import time
+import matplotlib.pyplot as plt
 
 def copy_state(ϕ, n):
     '''
@@ -110,6 +113,13 @@ def trace_states(states, partition_index):
     states_ = states.reshape(N, partition_index, -1)
     return contract('ijk, ijl -> ikl', states_, states_.conj())
 
+def pred_U_state(states, U, labelNo=4):
+    dim = states.shape[1]
+    statesU = apply_U(states, U)
+    partition_index = dim // 2**labelNo
+    rhoU = trace_states(statesU, partition_index)
+    return np.diagonal(rhoU, axis1=1, axis2=2)
+
 def train_3_copy():
     from stacking_simple import calculate_tanhCost, labelsToBitstrings
     from stacking_simple import update_U
@@ -135,36 +145,107 @@ def train_3_copy():
     trainLabelBs = labelsToBitstrings(trainingLabel, 4)
     U = np.eye(dim, dtype=complex)
 
-    #print('Calculating initial cost...')
-    #start = time.perf_counter()
-    #costInitial = calculate_tanhCost(states, U, trainingLabelBs, label_start= ls)
-    #end = time.perf_counter()
-    #print(f'Time taken: {end-start}s')
-    #print(f'Initial cost: {costInitial}')
 
+    U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
 
-    print('Calculating old update U...')
+    # Fashion MNIST 2 copy
+    As = [[500, 500, 500, 500],
+          [5000, 5000, 5000, 5000]]
+    Ai = 0
+    switch_index = [50]
+    Nsteps = 300
+
+    # Fashion MNIST
+    f0 = 0.10
+    f = np.copy(f0)
+    decayRate = 0.035
+
+    def curr_f(decayRate, itNumber, initialRate):
+        return initialRate / (1 + decayRate * itNumber)
+
+    costInitial = calculate_tanhCost(states, U_update, trainLabelBs, label_start= ls, A=As[Ai])
+    predsInitial = pred_U_state(states, U_update)
+    accInitial = evaluate_classifier_top_k_accuracy(predsInitial, trainingLabel, 1)
+
+    print('Initial accuracy: ', accInitial)
+    print('Initial cost: ', costInitial)
+    print("")
+
+    costsList = [costInitial]
+    accuracyList = [accInitial]
+    fList = []
+    ortho_step = Nsteps + 10
+    i = 0
+
     start = time.perf_counter()
-    U_updated, cost = update_U(states, U, trainLabelBs, costs=True, label_start = ls)
+    print(ls)
+    assert()
+    for n in range(Nsteps):
+        A = As[Ai]
+        print(f'Update step {n+1}')
+        f = curr_f(decayRate, i, f0)
+        if f < 2e-3:
+            f = 2e-3
+        print(f'   f: {f}')
+        U_update, costs = update_U(trainingPred, U_update, trainLabelBs,
+                f=f, costs=True, A=A, label_start=ls)
+
+        updatePreds = pred_U_state(states, U_update)
+
+        accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
+        print(f'   Accuracy: {accUpdate}')
+        print(f'   Cost: ', costs)
+        print("")
+
+        accuracyList.append(accUpdate)
+        costsList.append(costs)
+        fList.append(f)
+
+        # with open(csv_data_file, 'a') as fle:
+        #     line = np.array([accUpdate, costs, f])
+        #     np.savetxt(fle, line.reshape(1, -1), delimiter=', ')
+
+        # For running with Fashion MNIST
+        if n in switch_index:
+            print('Resetting Ai and f0')
+            Ai += 1
+            f0 = f0*0.8
+            i = 0
+
+        # if n % save_interval == 0:
+        #     save_name = save_dir + f'step_{n}_hist.png'
+        #     plot_qubit_histogram(updatePreds, trainingLabelBitstrings,
+        #             title=f'Step: {n}', show=False, save_name=save_name)
+        #     classifier_name = classifier_dir + f'step_{n}.npy'
+        #     np.save(classifier_name, U_update)
+
+        if n % ortho_step:
+            U_update = get_Polar(U_update)
+
+        i += 1
+
+
+
     end = time.perf_counter()
-    print(f'Time taken: {end - start}s')
-    print()
 
-    print('Calculating linear update U...')
-    start = time.perf_counter()
-    U_update_linear, cost_linear = update_U_linear(states, U, trainLabelBs, costs=True, label_start = ls)
-    end = time.perf_counter()
-    print(f'Time taken: {end - start}s')
-    print()
+    print(f'Elapsed time: {end - start:0.4f} seconds')
 
-    # print(f'Old cost {cost}')
-    print(f'New cost {cost_linear}')
-    print()
+    plt.figure()
+    plt.title('Accuracy')
+    plt.plot(accuracyList)
+    #plt.savefig(save_dir + 'accuracy.png')
 
-    print('Checking close...')
-    print(np.allclose(U_updated, U_update_linear))
-    print(np.linalg.norm(U_updated - U_update_linear))
+    plt.figure()
+    plt.title('Costs')
+    plt.plot(costsList)
+    #plt.savefig(save_dir + 'costs.png')
 
+    plt.figure()
+    plt.title('Learning Rates')
+    plt.plot(fList)
+    #plt.savefig(save_dir + 'lr.png')
+
+    plt.show()
 
 
 
