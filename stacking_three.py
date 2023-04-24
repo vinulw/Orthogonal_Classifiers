@@ -3,6 +3,8 @@ from stacking_simple import generate_Zi, generate_CoeffArr
 from stacking_simple import load_data
 from functools import reduce
 from datetime import datetime
+from ncon import ncon
+from collections.abc import Iterable
 
 import numpy as np
 import time
@@ -39,7 +41,7 @@ def calculate_ZOverlap_n(ϕs, n, U, Zi):
         Zmeasures[i] = Zmeasure
     return Zmeasures
 
-def update_U_n(ϕs, U, labelBitstrings, n=3, f=0.1, costs=False, A=100, label_start=0):
+def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
     '''
     Do a single update of U using tanh cost function.
 
@@ -52,8 +54,8 @@ def update_U_n(ϕs, U, labelBitstrings, n=3, f=0.1, costs=False, A=100, label_st
                             padded to length of state space in qubits as an
                             array of size (N, qubitNo) each element in this
                             array ∈ {0, 1}
-    n : Number of copies of ϕ to take
     '''
+    from stacking_simple import calculate_ZOverlap
     A_iter = False
     if isinstance(A, Iterable):
         A_iter = True
@@ -61,17 +63,42 @@ def update_U_n(ϕs, U, labelBitstrings, n=3, f=0.1, costs=False, A=100, label_st
     else:
         A_curr = A
 
-    N = ϕs.shape[0]
-    labelNo = labelBitstrings.shape[1] # Number of label qubits
-
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
-    qNo *= n
+    N = ϕs.shape[0]
 
-    for i in range(labelNo):
+    dZ = np.zeros(U.shape, dtype=complex)
+    totalCost = 0.0
+
+    for i in range(qNo - label_start):
         if A_iter:
             A_curr = A[i]
         Zi = generate_Zi(qNo, i+1+label_start)
+        Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
+        dZi = A_curr * (1 - np.tanh(A_curr*Zoverlaps)**2)
+
         coeffArr = generate_CoeffArr(labelBitstrings, i)
+        # Iterate over each state to get contribution to update
+        for j in range(N):
+            state = ϕs[j]
+            dOdV = contract('j, kl, lm, m ->kj',
+                    np.conj(state), Zi, U, state)
+            dZ += coeffArr[j] * dZi[j] * dOdV
+
+        if costs:
+            currCost = np.tanh(A_curr*Zoverlaps)
+            currCost = np.einsum('i,i', coeffArr, currCost) / N
+            totalCost += currCost
+
+    # Normalisation leads to instability
+    dZ = dZ / (np.sqrt(ncon([dZ, dZ.conj()], [[1, 2], [1, 2]])) + 1e-14)
+
+    #U_update = get_Polar(U + f*dZ)
+    U_update = U + f*dZ
+    U_update = U_update / np.linalg.norm(U_update)
+
+    if costs:
+        return U_update, totalCost
+    return U_update
 
 def trace_states(states, partition_index):
     '''
@@ -85,6 +112,7 @@ def trace_states(states, partition_index):
 
 def train_3_copy():
     from stacking_simple import calculate_tanhCost, labelsToBitstrings
+    from stacking_simple import update_U
     now = datetime.now()
     now = now.strftime('%d%m%Y%H%M%S')
 
@@ -104,7 +132,7 @@ def train_3_copy():
               N)
 
     states = np.array([copy_state(s, n_copies) for s in trainingPred])
-    trainingLabelBs = labelsToBitstrings(trainingLabel, 4)
+    trainLabelBs = labelsToBitstrings(trainingLabel, 4)
     U = np.eye(dim, dtype=complex)
 
     #print('Calculating initial cost...')
@@ -114,66 +142,28 @@ def train_3_copy():
     #print(f'Time taken: {end-start}s')
     #print(f'Initial cost: {costInitial}')
 
-    print('Now modifying the way U is applied')
-    from stacking_simple import apply_U_rho, trace_rho
-    print('Calculating using old method...')
+
+    print('Calculating old update U...')
     start = time.perf_counter()
-    qNo = 4*n_copies
-    rhos =  np.array([np.outer(s, s.conj()) for s in states])
-    rhos = apply_U_rho(rhos, U)
-    traced_rhos = trace_rho(rhos, qNo, trace_ind=[0, 1, 2, 3])
+    U_updated, cost = update_U(states, U, trainLabelBs, costs=True, label_start = ls)
     end = time.perf_counter()
-    print(f'Time taken: {end-start}s')
+    print(f'Time taken: {end - start}s')
+    print()
 
-    print('Applying U linearly...')
-    from stacking_simple import apply_U
+    print('Calculating linear update U...')
     start = time.perf_counter()
-    statesU = apply_U(states, U)
-    traced_rho_new = np.zeros(traced_rhos.shape, dtype=complex)
-    for i, s in enumerate(statesU):
-        s_ = s.reshape(-1, 2**4)
-        rho_s_ = contract('ij, ik -> jk', s_, s_.conj())
-        traced_rho_new[i] = np.copy(rho_s_)
+    U_update_linear, cost_linear = update_U_linear(states, U, trainLabelBs, costs=True, label_start = ls)
     end = time.perf_counter()
-    print(f'Time taken: {end-start}s')
+    print(f'Time taken: {end - start}s')
+    print()
 
-    print('Applying U to state...')
-    start = time.perf_counter()
-    statesU = apply_U(states, U)
-    N = statesU.shape[0]
-    statesU = statesU.reshape(N, -1, 2**4)
-    print(statesU.shape)
-    trace_rho_applied = contract('ijk, ijl -> ikl', statesU, statesU.conj())
-    end = time.perf_counter()
-    print(f'Time taken: {end-start}s')
+    # print(f'Old cost {cost}')
+    print(f'New cost {cost_linear}')
+    print()
 
-    print('ptrace Function...')
-    start = time.perf_counter()
-    statesU = apply_U(states, U)
-    dim = statesU.shape[1]
-    partition_index = dim // (2**4)
-    trace_rho_func = trace_states(statesU, partition_index)
-    end = time.perf_counter()
-    print(f'Time taken: {end-start}s')
-
-
-    print('Checking close to linear...')
-    print(np.allclose(traced_rhos[0], traced_rho_new[0]))
-    print(np.linalg.norm(traced_rhos - traced_rho_new))
-
-    print('Checking close to applied...')
-    print(np.allclose(traced_rhos[0], trace_rho_applied[0]))
-    print(np.linalg.norm(traced_rhos - trace_rho_applied))
-
-    print('Checking close to func...')
-    print(np.allclose(traced_rhos[0], trace_rho_func[0]))
-    print(np.linalg.norm(traced_rhos - trace_rho_func))
-
-
-
-
-
-
+    print('Checking close...')
+    print(np.allclose(U_updated, U_update_linear))
+    print(np.linalg.norm(U_updated - U_update_linear))
 
 
 

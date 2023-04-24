@@ -252,7 +252,7 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
 
     dZ = np.zeros(U.shape, dtype=complex)
     totalCost = 0.0
-    print('Iterated qNo: ', qNo - label_start)
+    # print('Iterated qNo: ', qNo - label_start)
     for i in range(qNo - label_start):
         #print(f"On Zi : {i}")
         if A_iter:
