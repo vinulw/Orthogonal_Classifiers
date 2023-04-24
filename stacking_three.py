@@ -11,7 +11,7 @@ def copy_state(ϕ, n):
     return reduce(np.kron, [ϕ]*n)
 
 
-def calculate_ZOverlap(ϕs, n, U, Zi):
+def calculate_ZOverlap_n(ϕs, n, U, Zi):
     '''
     Perform overlap calculation , < ϕ | U* Zi U | ϕ > for each ϕ in ϕs
 
@@ -27,14 +27,16 @@ def calculate_ZOverlap(ϕs, n, U, Zi):
     #Zmeasure = np.einsum('ij,kj,lk,lm,im->i',
     #                     np.conj(ϕs), np.conj(U), Zi, U, ϕs)
     N = ϕs.shape[0]
-    Zmeasures = np.zeros(ϕs.shape[0])
+    Zmeasures = np.zeros(ϕs.shape[0], dtype=complex)
     for i in range(N):
         ϕ = ϕs[i]
-        Zmeasure = contract('ij,kj,lk,lm,im->i',
-                            np.conj(ϕs), np.conj(U), Zi, U, ϕs)
+        ϕ = copy_state(ϕ, n)
+        Zmeasure = contract('j,kj,lk,lm,m',
+                            np.conj(ϕ), np.conj(U), Zi, U, ϕ)
+        Zmeasures[i] = Zmeasure
     return Zmeasures
 
-def update_n_U(ϕs, U, labelBitstrings, n=3, f=0.1, costs=False, A=100, label_start=0):
+def update_U_n(ϕs, U, labelBitstrings, n=3, f=0.1, costs=False, A=100, label_start=0):
     '''
     Do a single update of U using tanh cost function.
 
@@ -88,16 +90,34 @@ def train_3_copy():
               N)
 
 if __name__=="__main__":
-    state1 = np.random.rand(2**4)
+    from stacking_simple import calculate_ZOverlap
+    import time
+    states = np.random.rand(100, 2**4) + 1j*np.random.rand(100, 2**4)
+    states /= np.linalg.norm(states, axis=1).reshape(100, 1)
 
-    state2 = np.kron(state1, state1)
-    state2_red = copy_state(state1, 2)
+    n_copies = 3
+    label_start = 4*(n_copies-1) + 1
+    print(type(label_start))
+    states2 = np.array([copy_state(s, n_copies) for s in states])
 
-    state3 = np.kron(state2, state1)
-    state3_red = copy_state(state1, 3)
+    U = np.eye(2**(4*n_copies))
+    print(2**(4*n_copies - label_start))
+    Zi = generate_Zi(4*n_copies, label_start)
 
-    print('Verifying 2 copy...')
-    print(np.allclose(state2, state2_red))
+    print('Calculating old...')
+    start = time.perf_counter()
+    old_Z = calculate_ZOverlap(states2, U, Zi)
+    end = time.perf_counter()
+    print(f'Took {end - start}s')
+    print()
+    print('Calculating new...')
+    start = time.perf_counter()
+    new_Z = calculate_ZOverlap_n(states, n_copies, U, Zi)
+    end = time.perf_counter()
+    print(f'Took {end - start}s')
 
-    print('Verifying 3 copy...')
-    print(np.allclose(state3, state3_red))
+    print()
+    print('Comparing old vs new...')
+    print(np.linalg.norm(old_Z - new_Z))
+    print(np.allclose(old_Z, new_Z))
+
