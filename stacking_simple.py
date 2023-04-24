@@ -70,7 +70,6 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start=0):
     label_start : Start index for the label qubits
     '''
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
-    print(qNo)
     N = ϕs.shape[0]
 
     totalCost = 0.0
