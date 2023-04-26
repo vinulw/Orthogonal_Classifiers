@@ -8,9 +8,11 @@ from datetime import datetime
 from ncon import ncon
 from collections.abc import Iterable
 
+import os
 import numpy as np
 import time
 import matplotlib.pyplot as plt
+from tqdm import tqdm
 
 def copy_state(ϕ, n):
     '''
@@ -68,11 +70,16 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
 
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
     N = ϕs.shape[0]
+    dim = ϕs.shape[1]
 
     dZ = np.zeros(U.shape, dtype=complex)
     totalCost = 0.0
 
+    Ustates = np.einsum('lm, im -> il', U, ϕs)
+
+    out = np.empty(U.shape, dtype=complex) # Hold dOdV, speed up outer
     for i in range(qNo - label_start):
+        print(f'   Current qi: {i}')
         if A_iter:
             A_curr = A[i]
         Zi = generate_Zi(qNo, i+1+label_start)
@@ -81,11 +88,22 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
 
         coeffArr = generate_CoeffArr(labelBitstrings, i)
         # Iterate over each state to get contribution to update
-        for j in range(N):
+        dZiUstate = ncon([Zi, Ustates], ((-2, 1), (-1, 1)))
+        for j in tqdm(range(N), total=N):
             state = ϕs[j]
-            dOdV = contract('j, kl, lm, m ->kj',
-                    np.conj(state), Zi, U, state)
+            # Ustate = Ustates[j]
+            # Ust = np.einsum('lm, m', U, state)
+            # tqdm.write(f'Ust close {j}: {np.allclose(Ust, Ustates[j])}')
+            # dOdV = contract('j, kl, lm, m ->kj',
+            #         np.conj(state), Zi, U, state)
+            # dOdV = contract('j, kl, l ->kj',
+            #         np.conj(state), Zi, Ustate)
+            dZUstate = dZiUstate[j]
+            # dOdV = contract('j, k -> kj', np.conj(state), dZUstate)
+            dOdV = np.outer(dZUstate, np.conj(state), out=out)
             dZ += coeffArr[j] * dZi[j] * dOdV
+            # tqdm.write(f'dodv is close: {np.allclose(dOdV, dodv)}')
+        assert()
 
         if costs:
             currCost = np.tanh(A_curr*Zoverlaps)
@@ -120,7 +138,7 @@ def pred_U_state(states, U, labelNo=4):
     rhoU = trace_states(statesU, partition_index)
     return np.diagonal(rhoU, axis1=1, axis2=2)
 
-def train_3_copy():
+def train_3_copy(save=False, save_interval=10):
     from stacking_simple import calculate_tanhCost, labelsToBitstrings
     from stacking_simple import update_U
     now = datetime.now()
@@ -132,8 +150,8 @@ def train_3_copy():
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
-    N = 1000
-    n_copies = 2
+    N = 100
+    n_copies = 3
     dim = 2**(4*n_copies)
     ls = 4*(n_copies - 1)
 
@@ -151,11 +169,11 @@ def train_3_copy():
     # Fashion MNIST 2 copy
     As = [[500, 500, 500, 500],
           [5000, 5000, 5000, 5000]]
-    As = [[10, 10, 10, 10],
-          [100, 100, 100, 100]]
+    As = [[100, 100, 100, 100],
+          [1000, 1000, 1000, 1000]]
     Ai = 0
     switch_index = [50]
-    Nsteps = 50
+    Nsteps = 100
 
     # Fashion MNIST
     f0 = 0.10
@@ -180,15 +198,32 @@ def train_3_copy():
     ortho_step = Nsteps + 10
     i = 0
 
-    start = time.perf_counter()
+    if save:
+        save_dir = f'tanh_3copy/{now}/'
+        if not os.path.exists(save_dir):
+            os.makedirs(save_dir)
+            print(f'Made save directory: {save_dir}')
+        classifier_dir = save_dir + 'classifier_U/'
+        if not os.path.exists(classifier_dir):
+            os.makedirs(classifier_dir)
+            print(f'Made classifier directory: {classifier_dir}')
+        # CSV file to track training
+        csv_data_file = save_dir + 'run_data.csv'
+
+        with open(csv_data_file, 'w') as f:
+            header = 'accuracy, cost, lr'
+            line = np.array([accInitial, costInitial, f0])
+            np.savetxt(f, line.reshape(1, -1), delimiter=', ', header=header)
+
     for n in range(Nsteps):
+        start = time.perf_counter()
         A = As[Ai]
         print(f'Update step {n+1}')
         f = curr_f(decayRate, i, f0)
         if f < fmin:
             f = fmin
         print(f'   f: {f}')
-        U_update, costs = update_U(trainStates, U_update, trainLabelBs,
+        U_update, costs = update_U_linear(trainStates, U_update, trainLabelBs,
                 f=f, costs=True, A=A, label_start=ls)
 
         updatePreds = pred_U_state(trainStates, U_update)
@@ -196,15 +231,10 @@ def train_3_copy():
         accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
         print(f'   Accuracy: {accUpdate}')
         print(f'   Cost: ', costs)
-        print("")
 
         accuracyList.append(accUpdate)
         costsList.append(costs)
         fList.append(f)
-
-        # with open(csv_data_file, 'a') as fle:
-        #     line = np.array([accUpdate, costs, f])
-        #     np.savetxt(fle, line.reshape(1, -1), delimiter=', ')
 
         # For running with Fashion MNIST
         if n in switch_index:
@@ -213,23 +243,27 @@ def train_3_copy():
             f0 = f0*0.8
             i = 0
 
-        # if n % save_interval == 0:
-        #     save_name = save_dir + f'step_{n}_hist.png'
-        #     plot_qubit_histogram(updatePreds, trainingLabelBitstrings,
-        #             title=f'Step: {n}', show=False, save_name=save_name)
-        #     classifier_name = classifier_dir + f'step_{n}.npy'
-        #     np.save(classifier_name, U_update)
+        if save:
+            with open(csv_data_file, 'a') as fle:
+                line = np.array([accUpdate, costs, f])
+                np.savetxt(fle, line.reshape(1, -1), delimiter=', ')
+            if n % save_interval == 0:
+                save_name = save_dir + f'step_{n}_hist.png'
+                classifier_name = classifier_dir + f'step_{n}.npy'
+                np.save(classifier_name, U_update)
 
-        if n % ortho_step:
-            U_update = get_Polar(U_update)
+
+        #if n % ortho_step == 0:
+        #    print('Polarising...')
+        #    U_update = get_Polar(U_update)
+
 
         i += 1
 
+        end = time.perf_counter()
 
-
-    end = time.perf_counter()
-
-    print(f'Elapsed time: {end - start:0.4f} seconds')
+        print(f'Step elapsed time: {end - start:0.4f} seconds')
+        print("")
 
     plt.figure()
     plt.title('Accuracy')
@@ -251,5 +285,5 @@ def train_3_copy():
 
 
 if __name__=="__main__":
-    train_3_copy()
+    train_3_copy(save=False)
 

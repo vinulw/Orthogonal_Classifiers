@@ -81,8 +81,6 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start=0):
 
     totalCost = 0.0
 
-    print(qNo)
-    print(label_start)
     for i in range(qNo - label_start):
         if A_iter:
             A_curr = A[i]
@@ -641,8 +639,6 @@ def train_2_copy():
     if not os.path.exists(classifier_dir):
         os.makedirs(classifier_dir)
         print(f'Made classifier directory: {classifier_dir}')
-
-
 
     # MNIST
     #As = [[500, 5000, 5000, 5000],
