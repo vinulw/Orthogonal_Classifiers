@@ -13,6 +13,15 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from numba import jit
+
+@jit
+def outer_sum(xs, ys, dim):
+    sum = np.zeros((dim, dim), dtype=complex)
+    for x, y in zip(xs, ys):
+        sum += np.outer(x, y)
+    return sum
+
 
 def copy_state(ϕ, n):
     '''
@@ -78,6 +87,7 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
     Ustates = np.einsum('lm, im -> il', U, ϕs)
 
     out = np.empty(U.shape, dtype=complex) # Hold dOdV, speed up outer
+    ϕs_dag = np.conj(ϕs)
     for i in range(qNo - label_start):
         print(f'   Current qi: {i}')
         if A_iter:
@@ -89,8 +99,11 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
         coeffArr = generate_CoeffArr(labelBitstrings, i)
         # Iterate over each state to get contribution to update
         dZiUstate = ncon([Zi, Ustates], ((-2, 1), (-1, 1)))
+        coeffArrdZi = coeffArr * dZi
+        coeffArrdZiUstate = coeffArrdZi.reshape(-1, 1) * dZiUstate
+        dZold = np.zeros(U.shape, dtype=complex)
         for j in tqdm(range(N), total=N):
-            state = ϕs[j]
+            # state = ϕs[j]
             # Ustate = Ustates[j]
             # Ust = np.einsum('lm, m', U, state)
             # tqdm.write(f'Ust close {j}: {np.allclose(Ust, Ustates[j])}')
@@ -98,17 +111,27 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
             #         np.conj(state), Zi, U, state)
             # dOdV = contract('j, kl, l ->kj',
             #         np.conj(state), Zi, Ustate)
-            dZUstate = dZiUstate[j]
+            # dZUstate = dZiUstate[j]
             # dOdV = contract('j, k -> kj', np.conj(state), dZUstate)
-            dOdV = np.outer(dZUstate, np.conj(state), out=out)
-            dZ += coeffArr[j] * dZi[j] * dOdV
-            # tqdm.write(f'dodv is close: {np.allclose(dOdV, dodv)}')
-        assert()
+            # dOdV = np.outer(dZUstate, np.conj(state), out=out)
+            # dZold = coeffArr[j] * dZi[j] * dOdV
+
+            #dZold = coeffArrdZi[j] * dOdV
+            #dZold = np.outer(coeffArrdZiUstate[j], np.conj(state))
+            dZold += np.outer(coeffArrdZiUstate[j], ϕs_dag[j], out)
+        start = time.perf_counter()
+        dZnew = outer_sum(coeffArrdZiUstate, ϕs_dag, U.shape[0])
+        end = time.perf_counter()
+        print(f'Time taken new: {end - start}s')
+
+        tqdm.write(f'dZ is close: {np.allclose(dZold, dZnew)}')
+
 
         if costs:
             currCost = np.tanh(A_curr*Zoverlaps)
             currCost = np.einsum('i,i', coeffArr, currCost) / N
             totalCost += currCost
+    assert()
 
     # Normalisation leads to instability
     dZ = dZ / (np.sqrt(ncon([dZ, dZ.conj()], [[1, 2], [1, 2]])) + 1e-14)
@@ -150,7 +173,7 @@ def train_3_copy(save=False, save_interval=10):
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
-    N = 100
+    N = 1000
     n_copies = 3
     dim = 2**(4*n_copies)
     ls = 4*(n_copies - 1)
