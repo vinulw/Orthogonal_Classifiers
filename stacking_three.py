@@ -132,16 +132,16 @@ def train_3_copy():
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
-    N = 100
+    N = 1000
     n_copies = 2
     dim = 2**(4*n_copies)
-    ls = 4*(n_copies - 1) + 1
+    ls = 4*(n_copies - 1)
 
     trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
               prefix + trainingLabelPath,
               N)
 
-    states = np.array([copy_state(s, n_copies) for s in trainingPred])
+    trainStates = np.array([copy_state(s, n_copies) for s in trainingPred])
     trainLabelBs = labelsToBitstrings(trainingLabel, 4)
     U = np.eye(dim, dtype=complex)
 
@@ -151,20 +151,23 @@ def train_3_copy():
     # Fashion MNIST 2 copy
     As = [[500, 500, 500, 500],
           [5000, 5000, 5000, 5000]]
+    As = [[10, 10, 10, 10],
+          [100, 100, 100, 100]]
     Ai = 0
     switch_index = [50]
-    Nsteps = 300
+    Nsteps = 50
 
     # Fashion MNIST
     f0 = 0.10
+    fmin = 0.02
     f = np.copy(f0)
-    decayRate = 0.035
+    decayRate = 0.025
 
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
-    costInitial = calculate_tanhCost(states, U_update, trainLabelBs, label_start= ls, A=As[Ai])
-    predsInitial = pred_U_state(states, U_update)
+    costInitial = calculate_tanhCost(trainStates, U_update, trainLabelBs, label_start= ls, A=As[Ai])
+    predsInitial = pred_U_state(trainStates, U_update)
     accInitial = evaluate_classifier_top_k_accuracy(predsInitial, trainingLabel, 1)
 
     print('Initial accuracy: ', accInitial)
@@ -178,19 +181,17 @@ def train_3_copy():
     i = 0
 
     start = time.perf_counter()
-    print(ls)
-    assert()
     for n in range(Nsteps):
         A = As[Ai]
         print(f'Update step {n+1}')
         f = curr_f(decayRate, i, f0)
-        if f < 2e-3:
-            f = 2e-3
+        if f < fmin:
+            f = fmin
         print(f'   f: {f}')
-        U_update, costs = update_U(trainingPred, U_update, trainLabelBs,
+        U_update, costs = update_U(trainStates, U_update, trainLabelBs,
                 f=f, costs=True, A=A, label_start=ls)
 
-        updatePreds = pred_U_state(states, U_update)
+        updatePreds = pred_U_state(trainStates, U_update)
 
         accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
         print(f'   Accuracy: {accUpdate}')

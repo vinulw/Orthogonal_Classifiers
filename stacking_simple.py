@@ -81,6 +81,8 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start=0):
 
     totalCost = 0.0
 
+    print(qNo)
+    print(label_start)
     for i in range(qNo - label_start):
         if A_iter:
             A_curr = A[i]
@@ -250,6 +252,10 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
                             array of size (N, qubitNo) each element in this
                             array ∈ {0, 1}
     '''
+    print('Current update params: ')
+    print(A)
+    print(label_start)
+    print(f)
     A_iter = False
     if isinstance(A, Iterable):
         A_iter = True
@@ -600,7 +606,7 @@ def train_2_copy():
 
     # Make two copies
     Ncopies = 2
-    label_start = 0
+    label_start = 4
     qNo = 4*Ncopies
     dim_N = 2**qNo
 
@@ -645,26 +651,30 @@ def train_2_copy():
     As = [[500, 500, 500, 500],
           [5000, 5000, 5000, 5000]]
     switch_index = [50]
-    Nsteps = 300
-    # Fashion MNIST 1 copy
-    As = [[10, 10, 10, 10],
-          [100, 100, 100, 100]]
+    Nsteps = 50
     Ai = 0
-    switch_index = [200]
-    Nsteps = 600
+    # # Fashion MNIST 1 copy
+    # As = [[10, 10, 10, 10],
+    #       [100, 100, 100, 100]]
+    # Ai = 0
+    # switch_index = [200]
+    # Nsteps = 600
     # A = [10, 100, 100, 100] is my guess for the best results but not sure
     # MNIST
-    f0 = 0.125
+    # f0 = 0.125
     # Fashion MNIST
     f0 = 0.10
     f = np.copy(f0)
-    decayRate = 0.035
-    # Fashion MNIST 1 copy
-    f0 = 0.11
-    f = np.copy(f0)
     decayRate = 0.025
+    fmin = 0.02
+    ## Fashion MNIST 1 copy
+
+    #f0 = 0.11
+    #f = np.copy(f0)
+    #decayRate = 0.025
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
+
 
     # CSV file to track training
     csv_data_file = save_dir + 'run_data.csv'
@@ -683,14 +693,12 @@ def train_2_copy():
     tol = 0.05
     plot_qubit_histogram(initialPreds, trainingLabelBitstrings,
             'Initial histogram', show=False, save_name=save_dir + 'initial_hist.png')
-    print(label_start)
-    assert()
     for n in range(Nsteps):
         A = As[Ai]
         print(f'Update step {n+1}')
         f = curr_f(decayRate, i, f0)
-        if f < 2e-3:
-            f = 2e-3
+        if f < fmin:
+            f = fmin
         print(f'   f: {f}')
         U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
                 f=f, costs=True, A=A, label_start=label_start)
