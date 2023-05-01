@@ -155,7 +155,7 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     n_copies = config_dict['Ncopies']
 
     N = config_dict.get("Ntrain", 1000)
-    n_copies = 3
+    n_copies = config_dict.get("Ncopies", 2)
     dim = 2**(4*n_copies)
     ls = 4*(n_copies - 1)
 
@@ -169,7 +169,7 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
         U = np.eye(dim, dtype=complex)
         U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
     else:
-        U = np.copy(U0)
+        U_update = np.copy(U0)
 
     # Fashion MNIST 2 copy
     As = config_dict["As"]
@@ -194,6 +194,8 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     print('Initial cost: ', costInitial)
     print("")
 
+    assert()
+
     costsList = [costInitial]
     accuracyList = [accInitial]
     fList = []
@@ -201,7 +203,7 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     i = 0
 
     if save:
-        save_dir = f'tanh_3copy/{now}/'
+        save_dir = f'tanh_{n_copies}_copy/{now}/'
         if not os.path.exists(save_dir):
             os.makedirs(save_dir)
             print(f'Made save directory: {save_dir}')
@@ -225,8 +227,12 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
         if f < fmin:
             f = fmin
         print(f'   f: {f}')
-        U_update, costs = update_U_linear(trainStates, U_update, trainLabelBs,
-                f=f, costs=True, A=A, label_start=ls)
+        if n_copies < 3:
+            U_update, costs = update_U(trainStates, U_update, trainLabelBs,
+                    f=f, costs=True, A=A, label_start=ls)
+        else:
+            U_update, costs = update_U_linear(trainStates, U_update, trainLabelBs,
+                    f=f, costs=True, A=A, label_start=ls)
 
         updatePreds = pred_U_state(trainStates, U_update)
 
@@ -267,6 +273,10 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
         print(f'Step elapsed time: {end - start:0.4f} seconds')
         print("")
 
+    if save:
+        classifier_name = classifier_dir + f'step_{Nsteps}.npy'
+        np.save(classifier_name, U_update)
+
     plt.figure()
     plt.title('Accuracy')
     plt.plot(accuracyList)
@@ -300,5 +310,6 @@ def embed_U(U, qNo):
 
 
 if __name__=="__main__":
-    train_3_copy("experiment_param_three.json",save=False)
+    U0 = np.load('tanh_3copy/01052023150117/classifier_U/step_90.npy', allow_pickle=True)
+    train_3_copy("experiment_param_two.json", U0=U0, save=False)
 

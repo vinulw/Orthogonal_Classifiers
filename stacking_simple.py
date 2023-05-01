@@ -250,10 +250,6 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
                             array of size (N, qubitNo) each element in this
                             array ∈ {0, 1}
     '''
-    print('Current update params: ')
-    print(A)
-    print(label_start)
-    print(f)
     A_iter = False
     if isinstance(A, Iterable):
         A_iter = True
