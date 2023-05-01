@@ -87,8 +87,8 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
 
     out = np.empty(U.shape, dtype=complex) # Hold dOdV, speed up outer
     ϕs_dag = np.conj(ϕs)
-    for i in range(qNo - label_start):
-        print(f'   Current qi: {i}')
+    for i in tqdm(range(qNo - label_start), total=qNo-label_start):
+        # print(f'   Current qi: {i}')
         if A_iter:
             A_curr = A[i]
         Zi = generate_Zi(qNo, i+1+label_start)
@@ -100,31 +100,8 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
         dZiUstate = ncon([Zi, Ustates], ((-2, 1), (-1, 1)))
         coeffArrdZi = coeffArr * dZi
         coeffArrdZiUstate = coeffArrdZi.reshape(-1, 1) * dZiUstate
-        dZold = np.zeros(U.shape, dtype=complex)
-        for j in tqdm(range(N), total=N):
-            # state = ϕs[j]
-            # Ustate = Ustates[j]
-            # Ust = np.einsum('lm, m', U, state)
-            # tqdm.write(f'Ust close {j}: {np.allclose(Ust, Ustates[j])}')
-            # dOdV = contract('j, kl, lm, m ->kj',
-            #         np.conj(state), Zi, U, state)
-            # dOdV = contract('j, kl, l ->kj',
-            #         np.conj(state), Zi, Ustate)
-            # dZUstate = dZiUstate[j]
-            # dOdV = contract('j, k -> kj', np.conj(state), dZUstate)
-            # dOdV = np.outer(dZUstate, np.conj(state), out=out)
-            # dZold = coeffArr[j] * dZi[j] * dOdV
-
-            #dZold = coeffArrdZi[j] * dOdV
-            #dZold = np.outer(coeffArrdZiUstate[j], np.conj(state))
-            dZold += np.outer(coeffArrdZiUstate[j], ϕs_dag[j], out)
-        start = time.perf_counter()
-        dZnew = outer_sum(coeffArrdZiUstate, ϕs_dag, U.shape[0])
-        end = time.perf_counter()
-        print(f'Time taken new: {end - start}s')
-
-        tqdm.write(f'dZ is close: {np.allclose(dZold, dZnew)}')
-
+        for j in range(N):
+            dZ += np.outer(coeffArrdZiUstate[j], ϕs_dag[j], out)
 
         if costs:
             currCost = np.tanh(A_curr*Zoverlaps)
@@ -159,7 +136,7 @@ def pred_U_state(states, U, labelNo=4):
     rhoU = trace_states(statesU, partition_index)
     return np.diagonal(rhoU, axis1=1, axis2=2)
 
-def train_3_copy(config_path, save=False, save_interval=10):
+def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     from stacking_simple import calculate_tanhCost, labelsToBitstrings
     from stacking_simple import update_U
     now = datetime.now()
@@ -188,10 +165,11 @@ def train_3_copy(config_path, save=False, save_interval=10):
 
     trainStates = np.array([copy_state(s, n_copies) for s in trainingPred])
     trainLabelBs = labelsToBitstrings(trainingLabel, 4)
-    U = np.eye(dim, dtype=complex)
-
-
-    U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
+    if U0 is None:
+        U = np.eye(dim, dtype=complex)
+        U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
+    else:
+        U = np.copy(U0)
 
     # Fashion MNIST 2 copy
     As = config_dict["As"]
@@ -306,6 +284,19 @@ def train_3_copy(config_path, save=False, save_interval=10):
 
     plt.show()
 
+def embed_U(U, qNo):
+    '''
+    Embed U representing a stacking unitary on qOld qubits into a new U_prime acting on qNo qubits.
+    This embedding is done so that U_prime = I ⊗ U.
+    '''
+    dim_old = U.shape[0]
+    dim_new = 2**qNo
+    assert dim_new > dim_old
+    I = np.eye(dim_new - dim_old, dtype=complex)
+
+    U_prime = np.kron(I, U)
+
+    return U_prime
 
 
 if __name__=="__main__":
