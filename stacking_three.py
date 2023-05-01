@@ -13,9 +13,8 @@ import numpy as np
 import time
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from numba import jit
+import json
 
-@jit
 def outer_sum(xs, ys, dim):
     sum = np.zeros((dim, dim), dtype=complex)
     for x, y in zip(xs, ys):
@@ -131,7 +130,6 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
             currCost = np.tanh(A_curr*Zoverlaps)
             currCost = np.einsum('i,i', coeffArr, currCost) / N
             totalCost += currCost
-    assert()
 
     # Normalisation leads to instability
     dZ = dZ / (np.sqrt(ncon([dZ, dZ.conj()], [[1, 2], [1, 2]])) + 1e-14)
@@ -161,7 +159,7 @@ def pred_U_state(states, U, labelNo=4):
     rhoU = trace_states(statesU, partition_index)
     return np.diagonal(rhoU, axis1=1, axis2=2)
 
-def train_3_copy(save=False, save_interval=10):
+def train_3_copy(config_path, save=False, save_interval=10):
     from stacking_simple import calculate_tanhCost, labelsToBitstrings
     from stacking_simple import update_U
     now = datetime.now()
@@ -173,7 +171,13 @@ def train_3_copy(save=False, save_interval=10):
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
     trainingLabelPath = "ortho_d_final_vs_training_predictions_labels.npy"
 
-    N = 1000
+    # Load the config file
+    with open(config_path, 'r') as cf:
+        config_dict = json.load(cf)
+
+    n_copies = config_dict['Ncopies']
+
+    N = config_dict.get("Ntrain", 1000)
     n_copies = 3
     dim = 2**(4*n_copies)
     ls = 4*(n_copies - 1)
@@ -190,19 +194,16 @@ def train_3_copy(save=False, save_interval=10):
     U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
 
     # Fashion MNIST 2 copy
-    As = [[500, 500, 500, 500],
-          [5000, 5000, 5000, 5000]]
-    As = [[100, 100, 100, 100],
-          [1000, 1000, 1000, 1000]]
+    As = config_dict["As"]
     Ai = 0
-    switch_index = [50]
-    Nsteps = 100
+    switch_index = config_dict["switch_index"]
+    Nsteps = config_dict["Nsteps"]
 
     # Fashion MNIST
-    f0 = 0.10
-    fmin = 0.02
+    f0 = config_dict["f0"]
+    fmin = config_dict.get("fmin", 0.02)
     f = np.copy(f0)
-    decayRate = 0.025
+    decayRate = config_dict["decayRate"]
 
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
@@ -218,7 +219,7 @@ def train_3_copy(save=False, save_interval=10):
     costsList = [costInitial]
     accuracyList = [accInitial]
     fList = []
-    ortho_step = Nsteps + 10
+    # ortho_step = Nsteps + 10
     i = 0
 
     if save:
@@ -308,5 +309,5 @@ def train_3_copy(save=False, save_interval=10):
 
 
 if __name__=="__main__":
-    train_3_copy(save=False)
+    train_3_copy("experiment_param_three.json",save=False)
 
