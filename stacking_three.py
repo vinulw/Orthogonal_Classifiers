@@ -169,7 +169,7 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
         U = np.eye(dim, dtype=complex)
         U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)
     else:
-        U_update = np.copy(U0)
+        U_update = np.copy(embed_U(U0, n_copies*4))
 
     # Fashion MNIST 2 copy
     As = config_dict["As"]
@@ -186,6 +186,15 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
+    U_id = np.eye(U_update.shape[0], dtype=complex)
+    costId = calculate_tanhCost(trainStates, U_id, trainLabelBs, label_start= ls, A=As[Ai])
+    predsId = pred_U_state(trainStates, U_id)
+    accId = evaluate_classifier_top_k_accuracy(predsId, trainingLabel, 1)
+
+    print('Identity accuracy: ', accId)
+    print('Identity cost: ', costId)
+    print("")
+
     costInitial = calculate_tanhCost(trainStates, U_update, trainLabelBs, label_start= ls, A=As[Ai])
     predsInitial = pred_U_state(trainStates, U_update)
     accInitial = evaluate_classifier_top_k_accuracy(predsInitial, trainingLabel, 1)
@@ -193,8 +202,6 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     print('Initial accuracy: ', accInitial)
     print('Initial cost: ', costInitial)
     print("")
-
-    assert()
 
     costsList = [costInitial]
     accuracyList = [accInitial]
@@ -246,6 +253,10 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
 
         # For running with Fashion MNIST
         if n in switch_index:
+            if save:
+                save_name = save_dir + f'step_{n}_hist.png'
+                classifier_name = classifier_dir + f'step_{n}.npy'
+                np.save(classifier_name, U_update)
             print('Resetting Ai and f0')
             Ai += 1
             f0 = f0*0.8
@@ -301,8 +312,10 @@ def embed_U(U, qNo):
     '''
     dim_old = U.shape[0]
     dim_new = 2**qNo
+    if dim_old == dim_new:
+        return U
     assert dim_new > dim_old
-    I = np.eye(dim_new - dim_old, dtype=complex)
+    I = np.eye(dim_new // dim_old, dtype=complex)
 
     U_prime = np.kron(I, U)
 
@@ -310,6 +323,8 @@ def embed_U(U, qNo):
 
 
 if __name__=="__main__":
-    U0 = np.load('tanh_3copy/01052023150117/classifier_U/step_90.npy', allow_pickle=True)
-    train_3_copy("experiment_param_two.json", U0=U0, save=False)
+    # U0 = np.load('tanh_2_copy/01052023153003/classifier_U/step_150.npy', allow_pickle=True)
+    U0 = np.load('tanh_3_copy/01052023171750/classifier_U/step_100.npy', allow_pickle=True)
+    # U0 = None
+    train_3_copy("experiment_param_three.json", U0=U0, save=True)
 
