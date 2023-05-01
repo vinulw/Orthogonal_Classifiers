@@ -69,27 +69,19 @@ def calculate_tanhCost(ϕs, U, labelBitstrings, A=1, label_start=0):
                             array ∈ {0, 1}
     label_start : Start index for the label qubits
     '''
-    A_iter = False
-    if isinstance(A, Iterable):
-        A_iter = True
-        A_curr = A[0]
-    else:
-        A_curr = A
-
     qNo = int(np.log2(ϕs.shape[1])) # No. qubits
+    print(qNo)
     N = ϕs.shape[0]
 
     totalCost = 0.0
 
     for i in range(qNo - label_start):
-        if A_iter:
-            A_curr = A[i]
         Zi = generate_Zi(qNo, i+1+label_start)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
 
-        currCost = np.tanh(A_curr * Zoverlaps)
+        currCost = np.tanh(A * Zoverlaps)
         currCost = np.einsum('i,i', coeffArr, currCost) / (N)
 
         totalCost += currCost
@@ -250,10 +242,6 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
                             array of size (N, qubitNo) each element in this
                             array ∈ {0, 1}
     '''
-    print('Current update params: ')
-    print(A)
-    print(label_start)
-    print(f)
     A_iter = False
     if isinstance(A, Iterable):
         A_iter = True
@@ -265,7 +253,7 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
 
     dZ = np.zeros(U.shape, dtype=complex)
     totalCost = 0.0
-    # print('Iterated qNo: ', qNo - label_start)
+    print('Iterated qNo: ', qNo - label_start)
     for i in range(qNo - label_start):
         #print(f"On Zi : {i}")
         if A_iter:
@@ -602,8 +590,8 @@ def train_2_copy():
 
     trainingLabelBitstrings = labelsToBitstrings(trainingLabel, 4)
 
-    # Make two copies
-    Ncopies = 2
+    # Make N copies
+    Ncopies = 3
     label_start = 0
     if Ncopies == 2:
         label_start = 4
@@ -616,6 +604,7 @@ def train_2_copy():
     if Ncopies == 3:
         trainingPred_ = np.array([np.kron(im, im) for im in trainingPred])
         trainingPred = np.array([np.kron(im, impred) for im, impred in zip(trainingPred, trainingPred_)])
+
     ρPred = np.array([np.outer(pred, pred.conj()) for pred in trainingPred])
     print(ρPred.shape)
     U = np.eye(dim_N)
@@ -648,6 +637,8 @@ def train_2_copy():
         os.makedirs(classifier_dir)
         print(f'Made classifier directory: {classifier_dir}')
 
+
+
     # MNIST
     #As = [[500, 5000, 5000, 5000],
     #      [5000, 5000, 5000, 5000]]
@@ -671,20 +662,17 @@ def train_2_copy():
         Nsteps = 600
     # A = [10, 100, 100, 100] is my guess for the best results but not sure
     # MNIST
-    # f0 = 0.125
+    f0 = 0.125
     # Fashion MNIST
     f0 = 0.10
     f = np.copy(f0)
+    decayRate = 0.035
+    # Fashion MNIST 1 copy
+    f0 = 0.11
+    f = np.copy(f0)
     decayRate = 0.025
-    fmin = 0.02
-    ## Fashion MNIST 1 copy
-
-    #f0 = 0.11
-    #f = np.copy(f0)
-    #decayRate = 0.025
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
-
 
     # CSV file to track training
     csv_data_file = save_dir + 'run_data.csv'
@@ -707,8 +695,8 @@ def train_2_copy():
         A = As[Ai]
         print(f'Update step {n+1}')
         f = curr_f(decayRate, i, f0)
-        if f < fmin:
-            f = fmin
+        if f < 2e-3:
+            f = 2e-3
         print(f'   f: {f}')
         U_update, costs = update_U(trainingPred, U_update, trainingLabelBitstrings,
                 f=f, costs=True, A=A, label_start=label_start)
@@ -786,11 +774,10 @@ def train_2_copy():
 
 
 if __name__=="__main__":
-    train_2_copy()
-    assert()
-    U = np.load('tanh_train/03042023120628/classifier_U/step_470.npy')
-    continue_training(U)
+    #U = np.load('tanh_train/03042023120628/classifier_U/step_470.npy')
 
+    #continue_training(U)
+    train_2_copy()
     assert()
     '''
     Use data from Lewis' dropbox
