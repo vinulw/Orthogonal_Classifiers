@@ -10,9 +10,9 @@ tf.random.set_seed(42)
 
 def load_predictions(dataset):
     from functools import reduce
-    training_predictions = np.load('data/' + dataset + '/new_ortho_d_final_vs_training_predictions.npy')[15]
+    training_predictions = np.load('data_dropbox/' + dataset + '/new_ortho_d_final_vs_training_predictions.npy')[15]
     training_predictions = np.array([i / np.sqrt(i.T @ i) for i in training_predictions])
-    y_train = np.load('data/' + dataset + '/ortho_d_final_vs_training_predictions_labels.npy')
+    y_train = np.load('data_dropbox/' + dataset + '/ortho_d_final_vs_training_predictions_labels.npy')
 
     #training_predictions = np.array(reduce(list.__add__, [list(training_predictions[i*5421 : i * 5421 + 10]) for i in range(10)]))
     #y_train = np.array(reduce(list.__add__, [list(y_train[i*5421 : i * 5421 + 10]) for i in range(10)]))
@@ -75,8 +75,8 @@ def nonlinear_predictions(dataset, plot = False):
     )
 
 
-    test_preds = np.load('data/' + dataset + '/new_ortho_d_final_vs_test_predictions.npy')[15]
-    y_test = np.load('data/' + dataset + '/ortho_d_final_vs_test_predictions_labels.npy')
+    test_preds = np.load('data_dropbox/' + dataset + '/new_ortho_d_final_vs_test_predictions.npy')[15]
+    y_test = np.load('data_dropbox/' + dataset + '/ortho_d_final_vs_test_predictions_labels.npy')
 
     history = model.fit(
         training_predictions,
@@ -109,8 +109,8 @@ def svms(dataset):
     x,y = load_predictions('fashion_mnist')
     print('Initial training accuracy: ', evaluate_classifier_top_k_accuracy(x,y,1))
 
-    x_test = np.load('data/' + dataset + '/new_ortho_d_final_vs_test_predictions.npy')[15]
-    y_test = np.load('data/' + dataset + '/ortho_d_final_vs_test_predictions_labels.npy')
+    x_test = np.load('data_dropbox/' + dataset + '/new_ortho_d_final_vs_test_predictions.npy')[15]
+    y_test = np.load('data_dropbox/' + dataset + '/ortho_d_final_vs_test_predictions_labels.npy')
     print('Initial test accuracy: ', evaluate_classifier_top_k_accuracy(x_test,y_test,1))
     print()
 
@@ -183,8 +183,8 @@ def gaussian_svm(dataset):
     print()
     print('Initial training accuracy: ', evaluate_classifier_top_k_accuracy(x,y,1))
 
-    x_test = np.load('data/' + dataset + '/new_ortho_d_final_vs_test_predictions.npy')[15]
-    y_test = np.load('data/' + dataset + '/ortho_d_final_vs_test_predictions_labels.npy')
+    x_test = np.load('data_dropbox/' + dataset + '/new_ortho_d_final_vs_test_predictions.npy')[15]
+    y_test = np.load('data_dropbox/' + dataset + '/ortho_d_final_vs_test_predictions_labels.npy')
     print('Initial test accuracy: ', evaluate_classifier_top_k_accuracy(x_test,y_test,1))
     print()
     train_results = []
@@ -232,8 +232,8 @@ def fitting_stacking():
     plt.show()
 
 if __name__ == '__main__':
-    fitting_stacking()
+    svms('fashion_mnist')
     assert()
+    fitting_stacking()
     nonlinear_predictions('fashion_mnist')
     #gaussian_svm('fashion_mnist')
-    #svms('fashion_mnist')
