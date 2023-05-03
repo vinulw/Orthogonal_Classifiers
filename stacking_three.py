@@ -186,15 +186,6 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
 
-    U_id = np.eye(U_update.shape[0], dtype=complex)
-    costId = calculate_tanhCost(trainStates, U_id, trainLabelBs, label_start= ls, A=As[Ai])
-    predsId = pred_U_state(trainStates, U_id)
-    accId = evaluate_classifier_top_k_accuracy(predsId, trainingLabel, 1)
-
-    print('Identity accuracy: ', accId)
-    print('Identity cost: ', costId)
-    print("")
-
     costInitial = calculate_tanhCost(trainStates, U_update, trainLabelBs, label_start= ls, A=As[Ai])
     predsInitial = pred_U_state(trainStates, U_update)
     accInitial = evaluate_classifier_top_k_accuracy(predsInitial, trainingLabel, 1)
@@ -324,7 +315,8 @@ def embed_U(U, qNo):
 
 if __name__=="__main__":
     # U0 = np.load('tanh_2_copy/01052023153003/classifier_U/step_150.npy', allow_pickle=True)
-    U0 = np.load('tanh_3_copy/01052023171750/classifier_U/step_100.npy', allow_pickle=True)
+    prefix = '/home/ucapvdw/Projects/project-orthogonal_classifiers/tanh_data/'
+    U0 = np.load(prefix + '01052023181353/classifier_U/step_140.npy', allow_pickle=True)
     # U0 = None
     train_3_copy("experiment_param_three.json", U0=U0, save=True)
 
