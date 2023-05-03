@@ -1,0 +1,11 @@
+{
+  "Ntrain": 500,
+  "Ncopies": 3,
+  "U_path": null,
+  "As": [[5000, 50000, 50000, 5000]],
+  "switch_index": [],
+  "Nsteps": 100,
+  "f0": 0.05,
+  "decayRate": 0.035,
+  "fmin": 0.002
+}
