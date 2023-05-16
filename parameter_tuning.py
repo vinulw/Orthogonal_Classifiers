@@ -1,42 +1,43 @@
 import numpy as np
-import os
-from stacking_simple import apply_U_rho, load_data, labelsToBitstrings, evaluate_classifier_top_k_accuracy
-from stacking_three import copy_state, pred_U_state
-from stacking_simple import calculate_ZOverlap, generate_Zi
 import re
-from tqdm import tqdm
-import sys
+import os
+from scipy.optimize import minimize
 
-def get_meta_info(path):
+from stacking_simple import generate_CoeffArr, load_data, labelsToBitstrings
+
+
+def tanhCost(Z, A, labelBitstrings, N=1000, labelNo=4):
     '''
-    Get meta information about classifier including the data, job id (if present) and step number.
-
-    Paths should be of the form:
-    - `.../{date}_{job_id}/.../step_{step_no}.npy`
-    - `.../{date}/.../step_{step_no}.npy`
-
-    Where `date` is a 14 digit timestamp. `job_id` is 6 digits and `step_no` is number between (10, 999)
+    Calculate the tanh cost function using the expectation values on the label
+    space `Zi` and the label space coefficients A
     '''
-    r_date_jobid = re.compile('(\d{14})_?(\d{6})?')
-    r_step = re.compile('step_(\d{1,3}).npy')
 
-    searchObj = r_date_jobid.search(path)
-    date = searchObj.group(1)
-    jobid = searchObj.group(2)
+    totalCost = 0.0
 
-    searchObj = r_step.search(path)
-    step = searchObj.group(1)
+    for i in range(labelNo):
+        A_curr = A[i]
+        Zi = Z[i]
+        coeffArr = generate_CoeffArr(labelBitstrings, i)
 
-    return date, jobid, step
+
+        currCost = np.tanh(A_curr * Zi)
+        currCost = np.einsum('i,i', coeffArr, currCost) / (N)
+
+        totalCost += currCost
+    return totalCost
+
+def MSECost(x, Zs, accuracies, labelBs):
+    A = x[:4]
+    λ = x[4]
+
+    tCosts = []
+    for Z in Zs:
+        tCosts.append(tanhCost(Z, A, labelBs))
+
+    return np.linalg.norm(tCosts - λ*accuracies)
+
 
 if __name__=="__main__":
-
-    base_path = '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023162859_650236'
-
-    path = base_path + '/classifier_U'
-
-    U_paths = [path + '/' + p for p in os.listdir(path)]
-
     print('Loading data...')
     prefix = "data_dropbox/fashion_mnist/"
     trainingPredPath = "new_ortho_d_final_vs_training_predictions.npy"
@@ -44,55 +45,53 @@ if __name__=="__main__":
 
     N = 1000
 
-    trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
+    _, trainingLabel = load_data(prefix + trainingPredPath,
               prefix + trainingLabelPath,
               N)
 
-    for p in tqdm(U_paths, total=len(U_paths)):
-        date, jobid, step = get_meta_info(p)
-        tqdm.write(f'Working on {date}_{jobid}_{step}')
-        U = np.load(p)
-        n_copies = int(np.emath.logn(16, U.shape[0]))
+    labelBs = labelsToBitstrings(trainingLabel, 4)
 
-        trainStates = np.array([copy_state(s, n_copies) for s in trainingPred])
+    A = [100, 100, 100, 100]
 
-        tqdm.write('   Calculating accuracy...')
-        # Save accuracy
-        preds = pred_U_state(trainStates, U)
-        acc = evaluate_classifier_top_k_accuracy(preds, trainingLabel, 1)
+    # Load some Zi
 
-        accFile = base_path + '/U_accuracy.csv'
+    base_path = '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023122620_646288'
 
-        if not os.path.exists(accFile):
-            with open(accFile, 'w') as f:
-                line = 'Date, JobId, Step, Accuracy\n'
-                f.write(line)
+    base_path = '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023122620_646287'
 
-        tqdm.write('   Saving accuracy...')
-        with open(accFile, 'a') as f:
-            line = f'{date}, {jobid}, {step}, {acc}\n'
-            f.write(line)
+    base_path = '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023162859_650236'
 
-        tqdm.write('   Calculating Z Overlaps...')
-        # Calculate Z Overlaps
-        qNo = int(np.log2(trainStates.shape[1]))
-        label_start = qNo-4
+    overlap_fns = os.listdir(base_path + '/Zoverlaps')
+    # Extract the steps in order
+    r = re.compile('step_(\d{1,3}).npy')
+    steps = []
+    for fn in overlap_fns:
+        searchObj = r.search(fn)
+        steps.append(searchObj.group(1))
 
-        Zls = np.zeros((4, trainStates.shape[0]))
+    steps = np.array(steps, dtype=float)
 
-        for i in range(qNo - label_start):
-            Zi = generate_Zi(qNo, i+1+label_start)
-            Zoverlaps = np.real(calculate_ZOverlap(trainStates, U, Zi))
-            Zls[i] = Zoverlaps
+    # Load Zs
+    overlap_fns = [base_path + '/Zoverlaps/' + fn for fn in overlap_fns]
+    Zs = [np.load(fn) for fn in overlap_fns]
 
-        tqdm.write('   Saving Z Overlaps...')
-        Zdir = base_path + '/Zoverlaps'
+    # Load accuracies
+    accuracy_fn = base_path + '/U_accuracy.csv'
+    accuracies = np.loadtxt(accuracy_fn, delimiter=',', skiprows=1)
+    accuracies = accuracies[:, 2:]
+    # Order to match Zs
+    argorder = [np.argwhere(accuracies[:, 0] == i).flatten()[0] for i in steps]
+    accuracies = accuracies[argorder, 1]
 
-        if not os.path.exists(Zdir):
-            os.makedirs(Zdir)
+    # Optimize MSE
+    print('Minimising MSE')
+    x0 = [100, 100, 100, 100, 1]
 
-        Zfn = Zdir + '/' + f'step_{step}.npy'
+    res = minimize(MSECost, x0, args=(Zs, accuracies, labelBs))
+    print(res)
 
-        np.save(Zfn, Zls)
+
+
+
 
 
