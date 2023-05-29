@@ -51,47 +51,50 @@ if __name__=="__main__":
 
     labelBs = labelsToBitstrings(trainingLabel, 4)
 
-    A = [100, 100, 100, 100]
-
     # Load some Zi
 
-    base_path = '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023122620_646288'
+    basePaths = [
+    '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023122620_646288',
+    '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023122620_646287',
+    '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023162859_650236'
+            ]
 
-    base_path = '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023122620_646287'
+    Zs = []
+    accuracies = []
+    for base_path in basePaths:
 
-    base_path = '/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/myriad_data/03052023162859_650236'
+        overlap_fns = os.listdir(base_path + '/Zoverlaps')
+        # Extract the steps in order
+        r = re.compile('step_(\d{1,3}).npy')
+        steps = []
+        for fn in overlap_fns:
+            searchObj = r.search(fn)
+            steps.append(searchObj.group(1))
 
-    overlap_fns = os.listdir(base_path + '/Zoverlaps')
-    # Extract the steps in order
-    r = re.compile('step_(\d{1,3}).npy')
-    steps = []
-    for fn in overlap_fns:
-        searchObj = r.search(fn)
-        steps.append(searchObj.group(1))
+        steps = np.array(steps, dtype=float)
 
-    steps = np.array(steps, dtype=float)
+        # Load Zs
+        overlap_fns = [base_path + '/Zoverlaps/' + fn for fn in overlap_fns]
+        currZs = [np.load(fn) for fn in overlap_fns]
+        Zs.extend(currZs)
 
-    # Load Zs
-    overlap_fns = [base_path + '/Zoverlaps/' + fn for fn in overlap_fns]
-    Zs = [np.load(fn) for fn in overlap_fns]
+        # Load accuracies
+        accuracy_fn = base_path + '/U_accuracy.csv'
+        currAccuracies = np.loadtxt(accuracy_fn, delimiter=',', skiprows=1)
+        currAccuracies = currAccuracies[:, 2:]
+        # Order to match Zs
+        argorder = [np.argwhere(currAccuracies[:, 0] == i).flatten()[0] for i in steps]
+        currAccuracies = currAccuracies[argorder, 1]
+        accuracies.extend(currAccuracies)
 
-    # Load accuracies
-    accuracy_fn = base_path + '/U_accuracy.csv'
-    accuracies = np.loadtxt(accuracy_fn, delimiter=',', skiprows=1)
-    accuracies = accuracies[:, 2:]
-    # Order to match Zs
-    argorder = [np.argwhere(accuracies[:, 0] == i).flatten()[0] for i in steps]
-    accuracies = accuracies[argorder, 1]
+    accuracies = np.array(accuracies)
+    Zs = np.array(Zs)
 
     # Optimize MSE
     print('Minimising MSE')
     x0 = [100, 100, 100, 100, 1]
+    bounds = ((0, None), (0, None), (0, None), (0, None), (0, None))
 
-    res = minimize(MSECost, x0, args=(Zs, accuracies, labelBs))
+    res = minimize(MSECost, x0, args=(Zs, accuracies, labelBs), bounds=bounds)
     print(res)
-
-
-
-
-
 

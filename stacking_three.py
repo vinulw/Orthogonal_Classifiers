@@ -152,6 +152,9 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     with open(config_path, 'r') as cf:
         config_dict = json.load(cf)
 
+    print(config_dict)
+    assert()
+
     n_copies = config_dict['Ncopies']
 
     N = config_dict.get("Ntrain", 1000)
@@ -315,8 +318,8 @@ def embed_U(U, qNo):
 
 if __name__=="__main__":
     # U0 = np.load('tanh_2_copy/01052023153003/classifier_U/step_150.npy', allow_pickle=True)
-    prefix = '/home/ucapvdw/Projects/project-orthogonal_classifiers/tanh_data/'
-    U0 = np.load(prefix + '01052023181353/classifier_U/step_140.npy', allow_pickle=True)
-    # U0 = None
+    # prefix = '/home/ucapvdw/Projects/project-orthogonal_classifiers/tanh_data/'
+    # U0 = np.load(prefix + '01052023181353/classifier_U/step_140.npy', allow_pickle=True)
+    U0 = None
     train_3_copy("experiment_param_three.json", U0=U0, save=True)
 
