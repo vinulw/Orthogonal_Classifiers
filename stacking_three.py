@@ -152,9 +152,6 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     with open(config_path, 'r') as cf:
         config_dict = json.load(cf)
 
-    print(config_dict)
-    assert()
-
     n_copies = config_dict['Ncopies']
 
     N = config_dict.get("Ntrain", 1000)
@@ -185,6 +182,7 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     fmin = config_dict.get("fmin", 0.02)
     f = np.copy(f0)
     decayRate = config_dict["decayRate"]
+    ortho_step = config_dict.get('orthoStep', Nsteps + 10)
 
     def curr_f(decayRate, itNumber, initialRate):
         return initialRate / (1 + decayRate * itNumber)
@@ -235,6 +233,10 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
             U_update, costs = update_U_linear(trainStates, U_update, trainLabelBs,
                     f=f, costs=True, A=A, label_start=ls)
 
+        if i != 0 and i % ortho_step == 0:
+            print('Polarising...')
+            U_update = get_Polar(U_update)
+
         updatePreds = pred_U_state(trainStates, U_update)
 
         accUpdate = evaluate_classifier_top_k_accuracy(updatePreds, trainingLabel, 1)
@@ -264,12 +266,6 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
                 save_name = save_dir + f'step_{n}_hist.png'
                 classifier_name = classifier_dir + f'step_{n}.npy'
                 np.save(classifier_name, U_update)
-
-
-        #if n % ortho_step == 0:
-        #    print('Polarising...')
-        #    U_update = get_Polar(U_update)
-
 
         i += 1
 
@@ -321,5 +317,5 @@ if __name__=="__main__":
     # prefix = '/home/ucapvdw/Projects/project-orthogonal_classifiers/tanh_data/'
     # U0 = np.load(prefix + '01052023181353/classifier_U/step_140.npy', allow_pickle=True)
     U0 = None
-    train_3_copy("experiment_param_three.json", U0=U0, save=True)
+    train_3_copy("experiment_param_two.json", U0=U0, save=False)
 
