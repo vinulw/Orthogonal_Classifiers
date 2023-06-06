@@ -289,6 +289,11 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
     # Normalisation leads to instability
     dZ = dZ / (np.sqrt(ncon([dZ, dZ.conj()], [[1, 2], [1, 2]])) + 1e-14)
 
+    # Unitary update projection
+    print('Projecting unitary...')
+    dZ = 0.5 * (dZ - U @ dZ.conj().T @ U )
+
+
     #U_update = get_Polar(U + f*dZ)
     U_update = U + f*dZ
     U_update = U_update / np.linalg.norm(U_update)
