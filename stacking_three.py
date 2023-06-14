@@ -318,10 +318,10 @@ if __name__=="__main__":
     # U0 = np.load('tanh_2_copy/01052023153003/classifier_U/step_150.npy', allow_pickle=True)
     # prefix = '/home/ucapvdw/Projects/project-orthogonal_classifiers/tanh_data/'
     # U0 = np.load(prefix + '01052023181353/classifier_U/step_140.npy', allow_pickle=True)
-    prefix = "/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/tanh_2_copy/06062023160233/classifier_U/"
-    U0 = np.load(prefix + 'step_70.npy')
-    print('Doing polar decomposition...')
-    U0 = get_Polar(U0)
-    print('Training...')
-    train_3_copy("experiment_param_two.json", U0=U0, save=True)
+    prefix = '/home/ucapvdw/code/Orthogonal_Classifiers/tanh_1_copy/14062023123924/classifier_U/'
+    U0 = np.load(prefix + 'step_240.npy')
+    #print('Doing polar decomposition...')
+    #U0 = get_Polar(U0)
+    #print('Training...')
+    train_3_copy("experiment_param_one.json", U0=U0, save=True)
 
