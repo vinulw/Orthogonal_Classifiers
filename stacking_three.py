@@ -219,10 +219,11 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
             np.savetxt(f, line.reshape(1, -1), delimiter=', ', header=header)
 
     for n in range(Nsteps):
+        dRate = decayRate[Ai]
         start = time.perf_counter()
         A = As[Ai]
         print(f'Update step {n+1}')
-        f = curr_f(decayRate, i, f0)
+        f = curr_f(dRate, i, f0)
         if f < fmin:
             f = fmin
         print(f'   f: {f}')
@@ -313,12 +314,14 @@ def embed_U(U, qNo):
 
 
 if __name__=="__main__":
-    print('Loaiding U0...')
-    U0 = np.load('tanh_2_copy/01052023153003/classifier_U/step_150.npy', allow_pickle=True)
-    print('Doing polar decomposition...')
-    U0 = get_Polar(U0)
+    print('Loading U0...')
+    # U0 = np.load('tanh_2_copy/01052023153003/classifier_U/step_150.npy', allow_pickle=True)
     # prefix = '/home/ucapvdw/Projects/project-orthogonal_classifiers/tanh_data/'
     # U0 = np.load(prefix + '01052023181353/classifier_U/step_140.npy', allow_pickle=True)
+    prefix = "/mnt/c/Users/vwimalaweera/OneDrive - University College London/Project_Files/project-orthogonal_classifier/tanh_2_copy/06062023160233/classifier_U/"
+    U0 = np.load(prefix + 'step_70.npy')
+    print('Doing polar decomposition...')
+    U0 = get_Polar(U0)
     print('Training...')
     train_3_copy("experiment_param_two.json", U0=U0, save=True)
 
