@@ -111,6 +111,9 @@ def update_U_linear(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_st
     # Normalisation leads to instability
     dZ = dZ / (np.sqrt(ncon([dZ, dZ.conj()], [[1, 2], [1, 2]])) + 1e-14)
 
+    # Project unitary
+    dZ = 0.5 * (dZ - U @ dZ.conj().T @ U )
+
     #U_update = get_Polar(U + f*dZ)
     U_update = U + f*dZ
     U_update = U_update / np.linalg.norm(U_update)
@@ -158,6 +161,10 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
     n_copies = config_dict.get("Ncopies", 2)
     dim = 2**(4*n_copies)
     ls = 4*(n_copies - 1)
+
+    U_path = config_dict.get("U_path", None)
+    if U_path is not None:
+        U0 = np.load(U_path)
 
     trainingPred, trainingLabel = load_data(prefix + trainingPredPath,
               prefix + trainingLabelPath,
@@ -314,14 +321,13 @@ def embed_U(U, qNo):
 
 
 if __name__=="__main__":
-    print('Loading U0...')
     # U0 = np.load('tanh_2_copy/01052023153003/classifier_U/step_150.npy', allow_pickle=True)
     # prefix = '/home/ucapvdw/Projects/project-orthogonal_classifiers/tanh_data/'
     # U0 = np.load(prefix + '01052023181353/classifier_U/step_140.npy', allow_pickle=True)
-    prefix = '/home/ucapvdw/code/Orthogonal_Classifiers/tanh_1_copy/14062023123924/classifier_U/'
-    U0 = np.load(prefix + 'step_240.npy')
+    # prefix = '/home/ucapvdw/code/Orthogonal_Classifiers/tanh_1_copy/14062023123924/classifier_U/'
+    # U0 = np.load(prefix + 'step_240.npy')
     #print('Doing polar decomposition...')
     #U0 = get_Polar(U0)
     #print('Training...')
-    train_3_copy("experiment_param_one.json", U0=U0, save=True)
+    train_3_copy("experiment_param_three.json", save=True)
 

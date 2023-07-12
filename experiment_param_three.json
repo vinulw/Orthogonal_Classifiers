@@ -1,11 +1,11 @@
 {
   "Ntrain": 200,
   "Ncopies": 3,
-  "U_path": null,
-  "As": [[1.45311184e+03, 8.76080862e+00, 1.22328304e-01, 4.20091373e+00]],
+  "U_path": "tanh_3_copy/11072023181248/classifier_U/step_90.npy",
+  "As": [[10000, 10000, 10000, 10000]],
   "switch_index": [],
   "Nsteps": 100,
-  "f0": 0.08,
-  "decayRate": 0.035,
+  "f0": 0.02,
+  "decayRate": [0.035],
   "fmin": 0.002
 }
