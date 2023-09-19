@@ -263,7 +263,7 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
     totalCost = 0.0
     # print('Iterated qNo: ', qNo - label_start)
     for i in range(qNo - label_start):
-        #print(f"On Zi : {i}")
+        print(f"On Zi : {i}")
         if A_iter:
             A_curr = A[i]
 
@@ -271,7 +271,28 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
         coeffArr = generate_CoeffArr(labelBitstrings, i)
 
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
-        dOdVs = calculate_dOdV(ϕs, U, Zi)
+        plt.figure()
+        plt.hist(Zoverlaps)
+        plt.title(f'i={i} Before')
+        prob_scaling = 0.5
+        prob_dup = prob_scaling*(1.0 - abs(Zoverlaps))
+        choices = [True, False]
+        dup_mask = [np.random.choice(choices, p=[p, 1-p]) for p in prob_dup]
+        print('Number duplicated: ', sum(dup_mask))
+        print('Total number: ', len(Zoverlaps))
+        dup_phi = ϕs[dup_mask]
+        scaling = 0.01*np.mean(dup_phi, axis=1)
+        dup_phi = dup_phi + np.dot(scaling, np.random.randn(*dup_phi.shape))
+
+        Z_dups = np.real(calculate_ZOverlap(dup_phi, U, Zi))
+        Zoverlaps = np.concatenate((Zoverlaps, Z_dups))
+        ϕs_ = np.concatenate((ϕs, dup_phi))
+
+        plt.figure()
+        plt.hist(Zoverlaps)
+        plt.title(f'i={i} After')
+        continue
+        dOdVs = calculate_dOdV(ϕs_, U, Zi)
 
         #dZi = A * (np.tanh(A)*np.cosh(A*np.sign(Zoverlaps)*np.absolute(Zoverlaps)))**(-2)
         #dZi = A * (np.tanh(A)*np.cosh(A*Zoverlaps))**(-2)
@@ -287,6 +308,8 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
             totalCost += currCost
 
     # Normalisation leads to instability
+    plt.show()
+    assert()
     dZ = dZ / (np.sqrt(ncon([dZ, dZ.conj()], [[1, 2], [1, 2]])) + 1e-14)
 
     # Unitary update projection

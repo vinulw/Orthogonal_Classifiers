@@ -329,5 +329,5 @@ if __name__=="__main__":
     #print('Doing polar decomposition...')
     #U0 = get_Polar(U0)
     #print('Training...')
-    train_3_copy("experiment_param_three.json", save=True)
+    train_3_copy("experiment_param_two.json", save=False)
 
