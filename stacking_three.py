@@ -172,6 +172,13 @@ def train_3_copy(config_path, U0=None, save=False, save_interval=10):
 
     trainStates = np.array([copy_state(s, n_copies) for s in trainingPred])
     trainLabelBs = labelsToBitstrings(trainingLabel, 4)
+    print(np.unique(trainLabelBs, axis=0))
+    print(trainStates.shape)
+    print(np.log2(trainStates.shape[1]))
+    nqubits = 4*n_copies
+    state = trainStates[0].reshape([2]*nqubits)
+    print(state.shape)
+    assert()
     if U0 is None:
         U = np.eye(dim, dtype=complex)
         U_update = np.copy(U) + 1e-12*np.random.randn(*U.shape)

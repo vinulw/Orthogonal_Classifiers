@@ -269,35 +269,51 @@ def update_U(ϕs, U, labelBitstrings, f=0.1, costs=False, A=100, label_start=0):
 
         Zi = generate_Zi(qNo, i+1+label_start)
         coeffArr = generate_CoeffArr(labelBitstrings, i)
+        fig = plt.figure()
+        axs = fig.subplots(1, 2)
+        ax = axs[0]
+        ax.set_title(f'coeffArr {i}')
+        out = ax.hist(coeffArr)
+        print(f'Coeff arr {i} output: ', out)
 
         Zoverlaps = np.real(calculate_ZOverlap(ϕs, U, Zi))
-        plt.figure()
-        plt.hist(Zoverlaps)
-        plt.title(f'i={i} Before')
-        prob_scaling = 0.5
-        prob_dup = prob_scaling*(1.0 - abs(Zoverlaps))
-        choices = [True, False]
-        dup_mask = [np.random.choice(choices, p=[p, 1-p]) for p in prob_dup]
-        print('Number duplicated: ', sum(dup_mask))
-        print('Total number: ', len(Zoverlaps))
-        dup_phi = ϕs[dup_mask]
-        scaling = 0.01*np.mean(dup_phi, axis=1)
-        dup_phi = dup_phi + np.dot(scaling, np.random.randn(*dup_phi.shape))
+        ax = axs[1]
+        ax.set_title(f'Z Overlaps {i}')
+        out_neg = ax.hist(Zoverlaps[coeffArr == -1], color='r')
+        out_pos = ax.hist(Zoverlaps[coeffArr == 1], color='b')
+        print(f'Z Overlap {i} output negative: ', out_neg)
+        print(f'Z Overlap {i} output postive: ', out_pos)
+        # plt.figure()
+        # plt.hist(Zoverlaps)
+        # plt.title(f'i={i} Before')
+        # prob_scaling = 0.5
+        # prob_dup = prob_scaling*(1.0 - abs(Zoverlaps))
+        # choices = [True, False]
+        # dup_mask = [np.random.choice(choices, p=[p, 1-p]) for p in prob_dup]
+        # print('Number duplicated: ', sum(dup_mask))
+        # print('Total number: ', len(Zoverlaps))
+        # dup_phi = ϕs[dup_mask]
+        # scaling = 0.01*np.mean(dup_phi, axis=1)
+        # dup_phi = dup_phi + np.dot(scaling, np.random.randn(*dup_phi.shape))
 
-        Z_dups = np.real(calculate_ZOverlap(dup_phi, U, Zi))
-        Zoverlaps = np.concatenate((Zoverlaps, Z_dups))
-        ϕs_ = np.concatenate((ϕs, dup_phi))
+        # Z_dups = np.real(calculate_ZOverlap(dup_phi, U, Zi))
+        # Zoverlaps = np.concatenate((Zoverlaps, Z_dups))
+        # ϕs_ = np.concatenate((ϕs, dup_phi))
 
-        plt.figure()
-        plt.hist(Zoverlaps)
-        plt.title(f'i={i} After')
-        continue
-        dOdVs = calculate_dOdV(ϕs_, U, Zi)
-
-        #dZi = A * (np.tanh(A)*np.cosh(A*np.sign(Zoverlaps)*np.absolute(Zoverlaps)))**(-2)
-        #dZi = A * (np.tanh(A)*np.cosh(A*Zoverlaps))**(-2)
-        #dZi = A * (np.cosh(A*Zoverlaps))**(-2)
+        # Calculate the gradients
         dZi = A_curr * (1 - np.tanh(A_curr*Zoverlaps)**2)
+
+        # dups = np.round(dZi)
+        # print(dups[:100])
+        # print(sum(dups))
+
+        # print(dZi.shape)
+        # plt.figure()
+        # plt.hist(dZi)
+        # plt.show()
+        continue
+
+        dOdVs = calculate_dOdV(ϕs, U, Zi)
         dZi = contract('i,i,ijk->jk', coeffArr, dZi, dOdVs)
 
         dZ += dZi
